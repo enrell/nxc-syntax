@@ -1,0 +1,39 @@
+{
+  "name": "nxc-syntax",
+  "displayName": "NXC Syntax",
+  "description": "Syntax highlighting for the Not eXactly C (NXC) language (LEGO Mindstorms).",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": { "vscode": "^1.50.0" },
+  "categories": ["Programming Languages"],
+  "repository": {
+    "type": "git",
+    "url": "https://example.com/yourrepo.git"
+  },
+  "license": "MIT",
+  "main": "./extension.js",
+  "activationEvents": ["onLanguage:nxc"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "nxc",
+        "aliases": ["NXC", "nxc"],
+        "extensions": [".nxc"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "nxc",
+        "scopeName": "source.nxc",
+        "path": "./syntaxes/nxc.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "nxc",
+        "path": "./snippets/nxc.code-snippets"
+      }
+    ]
+  }
+}

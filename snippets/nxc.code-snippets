@@ -1,0 +1,120 @@
+{
+  "task main": {
+    "prefix": "taskmain",
+    "body": [
+      "task main() {",
+      "  ${1:// code}",
+      "}"
+    ],
+    "description": "task main boilerplate"
+  },
+  "repeat": {
+    "prefix": "repeat",
+    "body": [
+      "repeat(${1:count}) {",
+      "  ${2:// body}",
+      "}"
+    ],
+    "description": "repeat loop"
+  },
+  "OnFwd": {
+    "prefix": "onfwd",
+    "body": ["OnFwd(${1:OUT_A}, ${2:75});"],
+    "description": "OnFwd call"
+  },
+  "Wait": {
+    "prefix": "wait",
+    "body": ["Wait(${1:1000});"],
+    "description": "Wait milliseconds"
+  },
+  "RotateMotor": {
+    "prefix": "rotatemotor",
+    "body": ["RotateMotor(${1:OUT_A}, ${2:power}, ${3:degrees});"],
+    "description": "RotateMotor call"
+  },
+  "RotateMotorPID": {
+    "prefix": "rotatemotorpid",
+    "body": ["RotateMotorPID(${1:OUT_A}, ${2:power}, ${3:degrees}, ${4:P}, ${5:I}, ${6:D});"],
+    "description": "RotateMotorPID call"
+  },
+  "RotateMotorEx": {
+    "prefix": "rotatemotorex",
+    "body": ["RotateMotorEx(${1:OUT_AC}, ${2:power}, ${3:degrees}, ${4:turnRatio}, ${5:true}, ${6:true});"],
+    "description": "RotateMotorEx call"
+  },
+  "OnFwdReg": {
+    "prefix": "onfwdreg",
+    "body": ["OnFwdReg(${1:OUT_AC}, ${2:power}, ${3:OUT_REGMODE_SPEED});"],
+    "description": "OnFwdReg call"
+  },
+  "OnRevReg": {
+    "prefix": "onrevreg",
+    "body": ["OnRevReg(${1:OUT_AC}, ${2:power}, ${3:OUT_REGMODE_SPEED});"],
+    "description": "OnRevReg call"
+  },
+  "Sensor touch setup": {
+    "prefix": "sensortouch",
+    "body": ["SetSensor(${1:IN_1},SENSOR_TOUCH);"] ,
+    "description": "Configure touch sensor"
+  },
+  "Sensor light setup": {
+    "prefix": "sensorlight",
+    "body": ["SetSensorLight(${1:IN_3});"],
+    "description": "Configure light sensor"
+  },
+  "Sensor sound setup": {
+    "prefix": "sensorsound",
+    "body": ["SetSensorSound(${1:IN_2});"],
+    "description": "Configure sound sensor"
+  },
+  "Sensor ultrasonic setup": {
+    "prefix": "sensorus",
+    "body": ["SetSensorLowspeed(${1:IN_4});"],
+    "description": "Configure ultrasonic sensor (I2C)"
+  },
+  "Loop while true": {
+    "prefix": "whiletrue",
+    "body": ["while(true){", "  ${1:// body}", "}"] ,
+    "description": "Infinite loop"
+  },
+  "until": {
+    "prefix": "until",
+    "body": ["until(${1:condition});"],
+    "description": "until statement"
+  },
+  "PlayTone": {
+    "prefix": "playtone",
+    "body": ["PlayTone(${1:frequency}, ${2:duration});"],
+    "description": "PlayTone call"
+  },
+  "PlayToneEx": {
+    "prefix": "playtoneex",
+    "body": ["PlayToneEx(${1:frequency}, ${2:duration}, ${3:volume}, ${4:FALSE});"],
+    "description": "PlayToneEx call"
+  },
+  "TextOut": {
+    "prefix": "textout",
+    "body": ["TextOut(${1:x}, ${2:LCD_LINE1}, \"${3:Text}\", ${4:true});"],
+    "description": "TextOut call"
+  },
+  "NumOut": {
+    "prefix": "numout",
+    "body": ["NumOut(${1:x}, ${2:LCD_LINE1}, ${3:value});"],
+    "description": "NumOut call"
+  },
+  "GraphicOut": {
+    "prefix": "graphicout",
+    "body": ["GraphicOut(${1:x}, ${2:y}, \"${3:file.ric}\");"],
+    "description": "GraphicOut call"
+  },
+  "Task skeleton": {
+    "prefix": "task",
+    "body": ["task ${1:name}(){", "  ${2:// body}", "}"],
+    "description": "Task skeleton"
+  },
+  "StartTask": {
+    "prefix": "starttask",
+    "body": ["StartTask(${1:taskName});"],
+    "description": "StartTask call"
+  }
+}
