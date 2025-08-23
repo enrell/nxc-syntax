@@ -35,8 +35,9 @@ coverage/
 .env
 
 # Misc
-.vscodeignore
 .sass-cache
 .idea/
 *.sublime-project
 *.sublime-workspace
+
+bun.lock

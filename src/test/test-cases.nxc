@@ -1,0 +1,31 @@
+// Test cases to validate NXC diagnostics system
+
+// Test 1: Valid syntax
+task main() {
+  int x = 10;
+  float y = 3.14;
+  OnFwd(OUT_A, 75);
+  Wait(1000);
+}
+
+// Test 2: Syntax error - unclosed brace
+task errorTest() {
+  int z = 5;
+  // Missing closing brace
+
+// Test 3: Unused variable
+task unusedVarTest() {
+  int unused = 42;  // Should generate warning
+  int used = 10;
+  OnFwd(OUT_A, used);
+}
+
+// Test 4: Undefined function
+task undefinedFuncTest() {
+  UndefinedFunction();  // Should generate error
+}
+
+// Test 5: Very long line
+task longLineTest() {
+  int veryLongVariableNameThatExceedsTheRecommendedLineLengthAndShouldGenerateAWarningAboutLineLengthExceeding = 1;
+}

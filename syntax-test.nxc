@@ -1,0 +1,80 @@
+// NXC syntax highlight test file
+// Covers: preprocessor, comments, types, keywords, constants, functions, numbers, strings, operators, brackets
+
+#include "utils/nxc_api.txt"
+#define SAMPLE_CONST 0xABCD
+
+task main() {
+  // variables and types
+  int i = 42;
+  float f = 3.1415;
+  float f2 = 1.0e-3;
+  byte b = 0xFF;
+  char c = '\\n';
+  string s = "Hello \"NXC\"";
+  bool ok = TRUE;
+
+  // arrays and indexing
+  int numbers[5];
+  numbers[0] = i + 1;
+
+  // operators
+  int x = (i * 2) + (numbers[0] / 3) - (b % 10);
+  if (x > 0 && ok) {
+    x = x << 1;
+  } else {
+    x = x >> 1;
+  }
+
+  // call built-in functions
+  OnFwd(OUT_A, 75);
+  OnRev(OUT_B, -50);
+  OnFwdSync(OUT_AB, 50, 0);
+  Wait(1000);
+
+  // sensors and constants
+  int val = ReadSensorUS(IN_1);
+  SetSensorType(IN_1, SENSOR_TYPE_TOUCH);
+
+  // file API and strings
+  byte handle;
+  OpenFileRead("data.txt", handle);
+  PlayTone(1000, 200);
+
+  // loops and control
+  for (i = 0; i < 5; i = i + 1) {
+    RotateMotor(OUT_A, 50, 90);
+  }
+
+  // switch/case
+  switch (val) {
+    case 0:
+      PlaySound(SOUND_CLICK);
+      break;
+    default:
+      PlaySound(SOUND_BEEP);
+  }
+
+  // math
+  float r = sqrt(25.0);
+  float a = cos(1.57);
+
+  // struct example
+  struct Point { int x; int y; } p;
+  p.x = 10; p.y = 20;
+
+  // comment block
+  /*
+    Multiline comment should be highlighted as comment.block
+    and not interfere with other scopes.
+  */
+
+  // end
+  return;
+
+}
+
+// Intentional syntax error (unmatched brace) for editor error decoration test:
+// if (1 > 0) {
+//   OnFwd(OUT_A, 75);
+// // missing closing brace

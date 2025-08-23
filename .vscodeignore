@@ -1,0 +1,26 @@
+# Dependências
+node_modules/**
+bun.lockb
+
+# Git / CI
+.git/**
+.github/**
+.gitignore
+
+# Arquivos de desenvolvimento
+*.lock
+test-*.nxc
+test-*.js
+syntax-test.nxc
+build.js
+
+# Arquivos temporários
+*.tmp
+*.temp
+*.log
+
+# Documentação de desenvolvimento
+ALTERACOES-FINAIS.md
+
+# Pacotes gerados
+*.vsix

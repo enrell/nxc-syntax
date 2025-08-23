@@ -1,5 +1,4 @@
 {
-  "$schema": "https://imgs.search.brave.com/VSmf_ooqM36GvFZO-fbxJRL8_hDaiqLf6V7NzMeqKJc/rs:fit:860:0:0:0/g:ce/aHR0cHM6Ly9yb2Jv/dGljcy5iZW5lZGV0/dGVsbGkuY29tL3dw/LWNvbnRlbnQvdXBs/b2Fkcy8yMDEzLzA5/L0pvaG5OWFRfbWFp/bi5qcGc",
   "name": "NXC",
   "scopeName": "source.nxc",
   "patterns": [
@@ -8,9 +7,11 @@
     {"include": "#strings"},
     {"include": "#numbers"},
     {"include": "#keywords"},
-    {"include": "#storage"},
+    {"include": "#types"},
     {"include": "#constants"},
-    {"include": "#builtins"}
+    {"include": "#functions"},
+    {"include": "#operators"},
+    {"include": "#brackets"}
   ],
   "repository": {
     "comments": {
@@ -38,32 +39,41 @@
     },
     "keywords": {
       "patterns": [
-        {"name": "keyword.control.nxc", "match": "\\b(task|repeat|for|while|do|if|else|return|break|continue|switch|case|default)\\b"}
+        {"name": "keyword.control.c", "match": "\\b(task|repeat|for|while|do|if|else|return|break|continue|switch|case|default|goto)\\b"}
       ]
     },
-    "storage": {
+    "types": {
       "patterns": [
-        {"name": "storage.type.nxc", "match": "\\b(bool|byte|char|int|long|short|string|float|unsigned|signed|void)\\b"},
-        {"name": "storage.modifier.nxc", "match": "\\b(const|inline|volatile|static)\\b"}
+        {"name": "storage.type.c", "match": "\\b(void|bool|byte|char|int|long|short|string|float|unsigned|signed|struct|mutex)\\b"},
+        {"name": "storage.modifier.c", "match": "\\b(const|inline|volatile|static|extern|register)\\b"}
       ]
     },
     "constants": {
       "patterns": [
-        {"name": "constant.language.nxc", "match": "\\b(TRUE|FALSE|NULL)\\b"},
-        {"name": "constant.other.outputs.nxc", "match": "\\b(OUT_A|OUT_B|OUT_C|OUT_AB|OUT_AC|OUT_BC|OUT_ABC|OUT_ALL)\\b"},
-        {"name": "constant.other.inputs.nxc", "match": "\\b(IN_1|IN_2|IN_3|IN_4)\\b"}
+        {"name": "constant.language.c", "match": "\\b(TRUE|FALSE|NULL)\\b"},
+        {"name": "constant.other.outputs.c", "match": "\\b(OUT_A|OUT_B|OUT_C|OUT_AB|OUT_AC|OUT_BC|OUT_ABC|OUT_ALL)\\b"},
+        {"name": "constant.other.inputs.c", "match": "\\b(IN_1|IN_2|IN_3|IN_4)\\b"},
+        {"name": "constant.other.sensor.c", "match": "\\b(SENSOR_[A-Z0-9_]+|SENSOR_TYPE_[A-Z0-9_]+|SENSOR_MODE_[A-Z0-9_]+)\\b"},
+        {"name": "constant.other.nxc", "match": "\\b([A-Z][A-Z0-9_]{2,})\\b"}
       ]
     },
-    "builtins": {
+    "functions": {
       "patterns": [
-        {"name": "support.function.motor.nxc", "match": "\\b(OnFwd|OnRev|OnFwdReg|OnRevReg|Off|Coast|Float|RotateMotor|RotateMotorEx|RotateMotorPID|RotateMotorPIDEx)\\b"},
-        {"name": "support.function.timing.nxc", "match": "\\b(Wait|CurrentTick|ResetTimer|ClearTimer)\\b"},
-        {"name": "support.function.sound.nxc", "match": "\\b(PlayTone|PlayFile|PlayFileEx|SetSoundVolume|MuteSound)\\b"},
-        {"name": "support.function.sensor.nxc", "match": "\\b(Sensor|SensorValue|SetSensorType|SetSensorMode|ReadSensor|ClearSensor)\\b"},
-        {"name": "support.function.display.nxc", "match": "\\b(TextOut|NumOut|ClearScreen|RectOut|CircleOut|LineOut|PointOut)\\b"},
-        {"name": "support.function.task.nxc", "match": "\\b(StartTask|StopTask|StopAllTasks|Precedes|Follows|Priority|Yield)\\b"}
+        {"name": "support.function.c", "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()"}
       ]
-    }
+    },
+    "operators": {
+      "patterns": [
+        {"name": "keyword.operator.c", "match": "[+\\-*/%&|^~!=<>]=?|&&|\\|\\||<<|>>|::|\\?|:"}
+      ]
+    },
+    "brackets": {
+      "patterns": [
+        {"name": "punctuation.section.block.c", "match": "[{}]"},
+        {"name": "punctuation.section.parens.c", "match": "[()]"},
+        {"name": "punctuation.section.brackets.c", "match": "[\\[\\]]"}
+      ]
+  }
   },
   "fileTypes": ["nxc"],
   "uuid": "a4e5c9c0-0000-4d3a-9c6e-nxc-syntax-000001"

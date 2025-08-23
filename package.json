@@ -2,23 +2,45 @@
   "name": "nxc-syntax",
   "displayName": "NXC Syntax",
   "description": "Syntax highlighting for the Not eXactly C (NXC) language (LEGO Mindstorms).",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "publisher": "local",
-  "engines": { "vscode": "^1.50.0" },
-  "categories": ["Programming Languages"],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "icon": "assets/logo.jpg",
+  "categories": [
+    "Programming Languages"
+  ],
   "repository": {
     "type": "git",
-    "url": "https://example.com/yourrepo.git"
+    "url": "https://github.com/enrell/nxc-syntax.git"
   },
   "license": "MIT",
-  "main": "./extension.js",
-  "activationEvents": ["onLanguage:nxc"],
+  "main": "./src/extension.js",
+  "scripts": {
+    "build": "bun run build.js --package",
+    "test": "bun run build.js --test",
+    "dev": "bun run build.js",
+    "package": "bunx vsce package",
+    "publish": "bunx vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.9.2",
+    "@vscode/vsce": "^3.6.0"
+  },
   "contributes": {
     "languages": [
       {
         "id": "nxc",
-        "aliases": ["NXC", "nxc"],
-        "extensions": [".nxc"],
+        "aliases": [
+          "NXC",
+          "nxc"
+        ],
+        "extensions": [
+          ".nxc"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -34,6 +56,57 @@
         "language": "nxc",
         "path": "./snippets/nxc.code-snippets"
       }
-    ]
+    ],
+    "commands": [
+      {
+        "command": "nxc.reparseOpenFiles",
+        "title": "NXC: Reparse Open Files",
+        "category": "NXC"
+      },
+      {
+        "command": "nxc.rebuildIndex",
+        "title": "NXC: Rebuild Index",
+        "category": "NXC"
+      },
+      {
+        "command": "nxc.clearDiagnostics",
+        "title": "NXC: Clear All Diagnostics",
+        "category": "NXC"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "NXC Configuration",
+      "properties": {
+        "nxc.diagnostics.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable NXC diagnostics"
+        },
+        "nxc.diagnostics.maxLineLength": {
+          "type": "number",
+          "default": 120,
+          "description": "Maximum line length before warning"
+        },
+        "nxc.diagnostics.checkUnusedVariables": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check for unused variables"
+        },
+        "nxc.completion.suggestBuiltins": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include built-in functions in completion"
+        },
+        "nxc.completion.parameterHints": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show parameter hints in completion"
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "ohm-js": "^17.2.1"
   }
 }
