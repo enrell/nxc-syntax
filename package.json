@@ -22,6 +22,7 @@
     "test": "bun run build.js --test",
     "dev": "bun run build.js",
     "package": "bunx vsce package",
+    "login": "bunx vsce login",
     "publish": "bunx vsce publish"
   },
   "devDependencies": {
