@@ -1,7 +1,7 @@
 {
   "name": "nxc-syntax",
   "displayName": "NXC Syntax",
-  "description": "Syntax highlighting for the Not eXactly C (NXC) language (LEGO Mindstorms).",
+  "description": "A syntax highlighting and linter for the Not eXactly C (NXC) language (LEGO Mindstorms).",
   "version": "1.3.0",
   "publisher": "enrell",
   "engines": {
