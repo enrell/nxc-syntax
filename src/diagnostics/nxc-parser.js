@@ -18,15 +18,16 @@ NXC {
 
   IncludeDirective = "include" stringLiteral
 
-  DefineDirective = "define" ident ( "(" ParameterList? ")" )? ( ~\\n any )* \\n
-
+  DefineDirective = "define" ident ( "(" ParameterList? ")" )? ( ~
+ any )*
   ImportDirective = "import" stringLiteral
 
   DownloadDirective = "download" stringLiteral
 
   ConditionalDirective = ("if" | "ifdef" | "ifndef") Expression ("else" Expression)? "endif"
 
-  PragmaDirective = "pragma" ( ~\\n any )* \\n
+  PragmaDirective = "pragma" ( ~
+ any )*
 
   FunctionDefinition = FunctionSpecifier* ("sub" | "void" | TypeSpecifier) ident "(" ParameterList? ")" CompoundStatement
 
@@ -47,7 +48,7 @@ NXC {
 
   Declarator = ident ArraySpecifier? ("=" Initializer)?
 
-  ArraySpecifier = "[" Expression? "]"+  -- up to 4 dimensions
+  ArraySpecifier = "[" Expression? "]" // up to 4 dimensions
 
   Initializer = Expression | "{" InitializerList "}"
 
@@ -183,7 +184,7 @@ NXC {
 
   space += " " | "\\t" | "\\r" | "\\n" | Comment
 
-  Comment = "//" (~"\\n" any)* "\\n"
+  Comment = "//" (~"\\n" any)*
     | "/*" (~"*/" any)* "*/"
 
   ws = space*

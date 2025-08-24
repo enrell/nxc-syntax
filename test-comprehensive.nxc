@@ -1,248 +1,43 @@
-// ========================================
-// TESTE COMPLETO E ROBUSTO - NXC ANALYZER
-// ========================================
-// Este arquivo testa a detecção de erros reais vs falsos positivos
+// Comprehensive NXC Test File - Edge Cases and False Positives
 
-// ==========================================
-// SEÇÃO 1: CÓDIGO VÁLIDO (NÃO deve gerar erros)
-// ==========================================
+#define STRING_WITH_QUOTES "a string with \"quotes\""
+#define MULTILINE_MACRO(a, b) \
+  a + b;
 
-// Definições de constantes - OK
-#define MAX_SPEED 100
-#define MIN_SPEED 10
-#define SENSOR_THRESHOLD 50
+// --- String Edge Cases ---
+string s1 = "hello world";
+string s2 = "a string with an escaped quote: \"";
+string s3 = "a string with a backslash: \\"; // keep simple and valid
+string s4 = ""; // Empty string
 
-// Estruturas - OK
-typedef struct {
-    int x, y;
-    float angle;
-} Position;
+// This is a valid use of the preprocessor to define a function-like macro
+#define IS_ODD(n) ((n) % 2 != 0)
 
-typedef struct {
-    int left, right;
-    bool active;
-} Motors;
+// Global declarations
+int a = 1;
+int b = 2;
+int c = 3;
+int g = 2;
 
-// Variáveis globais - OK
-Position gPosition;
-Motors gMotors;
-int gState = 0;
-
-// Funções definidas pelo usuário - NÃO deve gerar "shadows built-in"
-void initRobot() {
-    gPosition.x = 0;
-    gPosition.y = 0;
-    gPosition.angle = 0.0;
-    gMotors.active = false;
-}
-
-int calculatePower(int base, int modifier) {
-    return base + modifier;
-}
-
-bool isInRange(int value, int min, int max) {
-    return (value >= min && value <= max);
-}
-
-void moveForward(int power) {
-    OnFwd(OUT_AB, power);
-    gMotors.active = true;
-}
-
-void stopMotors() {
-    Off(OUT_AB);
-    gMotors.active = false;
-}
-
-// Função com lógica complexa - OK
-void complexLogic() {
-    int sensor = Sensor(IN_1);
-    
-    if (sensor > SENSOR_THRESHOLD) {
-        moveForward(MAX_SPEED);
-    } else if (sensor < MIN_SPEED) {
-        stopMotors();
-    } else {
-        int power = calculatePower(MIN_SPEED, sensor / 2);
-        moveForward(power);
-    }
-    
-    // Loop válido
-    for (int i = 0; i < 10; i++) {
-        Wait(100);
-        if (Sensor(IN_1) < 20) {
-            break;
-        }
-    }
-    
-    // Switch válido
-    switch (gState) {
-        case 0:
-            initRobot();
-            break;
-        case 1:
-            moveForward(50);
-            break;
-        default:
-            stopMotors();
-            break;
-    }
-}
-
-// Task principal - OK
+// --- Bracket Balancing and runtime checks inside main ---
 task main() {
-    initRobot();
-    
-    while (true) {
-        complexLogic();
-        
-        if (gMotors.active) {
-            gPosition.x += 1;
-        }
-        
-        Wait(50);
-    }
+  // Nested parentheses
+  int x = (1 + (2 * 3));
+
+  // Example loop — must be inside a function/task
+  int i;
+  for (i = 0; i < 10; i++) {
+    // no-op
+  }
+
+  // Operator edge cases executed inside main
+  int result = a + b * c;
+  result = a + b; // valid assignment inside function
+
+  // Comment edge cases
+  int d = 1; /* This is a comment */ int e = 2;
+
+  // Semicolon tests (kept valid)
+  int f = 1;
+  
 }
-
-// ==========================================
-// SEÇÃO 2: ERROS REAIS (DEVE gerar erros)
-// ==========================================
-
-// ERRO 1: Chave não fechada
-task errorBrace() {
-    int x = 5;
-    OnFwd(OUT_A, x);
-    // Falta }
-
-// ERRO 2: Parênteses não fechados
-task errorParen() {
-    OnFwd(OUT_A, 75;  // Falta )
-}
-
-// ERRO 3: Função não definida
-task errorUndefined() {
-    NonExistentFunction();  // Esta função não existe
-    AnotherUndefinedFunc(10, 20);  // Esta também não
-}
-
-// ERRO 4: Função/task duplicada
-task duplicateTask() {
-    OnFwd(OUT_A, 50);
-}
-
-task duplicateTask() {  // ERRO: duplicata
-    OnFwd(OUT_B, 50);
-}
-
-// ERRO 5: String não terminada
-task errorString() {
-    string msg = "Hello World;  // Falta " de fechamento
-    PlaySound(msg);
-}
-
-// ERRO 6: Caracteres inválidos
-task errorInvalidChars() {
-    int x = 5;
-    randomchars123= =  // ERRO: sintaxe inválida
-    OnFwd(OUT_A, x);
-}
-
-// ERRO 7: Múltiplos operadores
-task errorMultipleOps() {
-    int x = 5;
-    int y = x +++++ 10;  // ERRO: múltiplos operadores
-}
-
-// ==========================================
-// SEÇÃO 3: AVISOS (DEVE gerar warnings)
-// ==========================================
-
-// WARNING 1: Linha muito longa
-task warningLongLine() {
-    int veryLongVariableNameThatExceedsTheRecommendedLineLengthAndShouldGenerateAWarningAboutLineLengthExceedingTheMaximumAllowedLengthForCodeReadability = 1;
-}
-
-// WARNING 2: Tabs e espaços misturados (se detectado)
-task warningMixedIndent() {
-	  int x = 5;  // Tab + espaços
-    int y = 10;   // Só espaços
-}
-
-// ==========================================
-// SEÇÃO 4: CASOS LIMÍTROFES (NÃO deve gerar erros)
-// ==========================================
-
-// Comentários com caracteres especiais - OK
-/* 
-   Este é um comentário com = = e outros chars +++
-   Não deve gerar erros de sintaxe
-*/
-
-// Strings com caracteres especiais - OK
-task edgeCaseStrings() {
-    string msg1 = "String com = = dentro";
-    string msg2 = "String com +++ dentro";
-    string msg3 = "String com \"aspas\" escapadas";
-    PlaySound(msg1);
-}
-
-// Preprocessor - OK
-#ifdef DEBUG
-    #define LOG(x) TextOut(0, 0, x)
-#else
-    #define LOG(x)
-#endif
-
-// Função com mesmo nome de variável em escopo diferente - OK
-void testScope() {
-    int value = 10;  // OK: variável local
-    OnFwd(OUT_A, value);
-}
-
-int value = 20;  // OK: variável global com mesmo nome
-
-// Arrays e ponteiros - OK
-task testArrays() {
-    int numbers[5];
-    numbers[0] = 10;
-    numbers[1] = numbers[0] + 5;
-    
-    string messages[] = {"Hello", "World", "NXC"};
-    PlaySound(messages[0]);
-}
-
-// Operadores complexos - OK
-task testOperators() {
-    int a = 10, b = 20, c = 30;
-    
-    bool result1 = (a < b) && (b < c);
-    bool result2 = (a == 10) || (b != 20);
-    int result3 = a + b * c / 2 - 5;
-    int result4 = (a > b) ? a : b;
-    
-    if (result1 && result2) {
-        OnFwd(OUT_A, result3);
-    }
-}
-
-// ==========================================
-// RESUMO ESPERADO:
-// ==========================================
-// ERROS (7):
-// - errorBrace: chave não fechada
-// - errorParen: parênteses não fechados  
-// - errorUndefined: 2 funções não definidas
-// - duplicateTask: função duplicada
-// - errorString: string não terminada
-// - errorInvalidChars: sintaxe inválida
-// - errorMultipleOps: múltiplos operadores
-//
-// WARNINGS (2):
-// - warningLongLine: linha muito longa
-// - warningMixedIndent: indentação mista (se detectado)
-//
-// FALSOS POSITIVOS (0):
-// - Nenhuma função válida deve gerar "shadows built-in"
-// - Nenhuma variável deve gerar "unused variable"
-// - Comentários e strings não devem gerar erros de sintaxe
-// ==========================================

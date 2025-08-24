@@ -139,10 +139,12 @@ class DiagnosticManager {
 
     const builtInFunctions = this.loadBuiltInFunctions();
     const declaredVariables = new Map();
-    const declaredFunctions = new Map();
+    const declaredFunctions = new Map(); // Will map name -> { line, conditional }
     const calledFunctions = new Set();
-    // FIX: Add a set to store the names of all defined macros
     const declaredMacros = new Set();
+
+    // Track preprocessor conditional nesting
+    let conditionalDepth = 0;
 
     cleanedLines.forEach((cleanedLine, lineIndex) => {
       const originalLine = lines[lineIndex];
@@ -152,12 +154,23 @@ class DiagnosticManager {
         return;
       }
 
-      // FIX: Look for macro definitions and add them to our set
+      // Look for macro definitions and add them to our set
       const macroDefinition = trimmedLine.match(/^\s*#\s*define\s+([a-zA-Z_][a-zA-Z0-9_]*)/);
       if (macroDefinition) {
         const macroName = macroDefinition[1];
         console.log(`Found macro definition: ${macroName}`);
         declaredMacros.add(macroName);
+      }
+
+      // Track preprocessor conditionals
+      const pp = trimmedLine.match(/^#\s*(if|ifdef|ifndef|else|endif)\b/);
+      if (pp) {
+        const directive = pp[1];
+        if (directive === 'if' || directive === 'ifdef' || directive === 'ifndef') {
+          conditionalDepth++;
+        } else if (directive === 'endif') {
+          conditionalDepth = Math.max(0, conditionalDepth - 1);
+        }
       }
 
       const varDeclaration = trimmedLine.match(/^\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+(\w+)/);
@@ -171,13 +184,46 @@ class DiagnosticManager {
       const funcDeclaration = trimmedLine.match(/^\s*(?:task|sub|void|int|float|byte|char|string|bool|long|short|unsigned)\s+(\w+)\s*\(/);
       if (funcDeclaration) {
         const funcName = funcDeclaration[1];
+        const isConditional = conditionalDepth > 0;
+        
         if (declaredFunctions.has(funcName)) {
-          const prevLine = declaredFunctions.get(funcName);
-          errors.push({ message: `Function/task '${funcName}' already declared at line ${prevLine + 1}`, line: lineIndex, column: originalLine.indexOf(funcName), severity: 'error', source: 'semantic-analyzer' });
-        } else if (builtInFunctions.has(funcName) && funcName !== 'main') {
-          warnings.push({ message: `Function '${funcName}' shadows a built-in function`, line: lineIndex, column: originalLine.indexOf(funcName), severity: 'warning', source: 'semantic-analyzer' });
+          const existing = declaredFunctions.get(funcName);
+          // Flag as error if both are non-conditional OR if one is non-conditional (will conflict)
+          if (!existing.conditional && !isConditional) {
+            errors.push({ 
+              message: `Function/task '${funcName}' already declared at line ${existing.line + 1}`, 
+              line: lineIndex, 
+              column: originalLine.indexOf(funcName), 
+              severity: 'error', 
+              source: 'semantic-analyzer' 
+            });
+          } else if (!existing.conditional || !isConditional) {
+            errors.push({ 
+              message: `Function/task '${funcName}' conflicts with declaration at line ${existing.line + 1}`, 
+              line: lineIndex, 
+              column: originalLine.indexOf(funcName), 
+              severity: 'error', 
+              source: 'semantic-analyzer' 
+            });
+          }
+          // Both are conditional - that's fine, they're in different preprocessor branches
+          
+          // Update to keep the non-conditional one if there is one
+          if (existing.conditional && !isConditional) {
+            declaredFunctions.set(funcName, { line: lineIndex, conditional: false });
+          }
+        } else {
+          if (builtInFunctions.has(funcName) && funcName !== 'main') {
+            warnings.push({ 
+              message: `Function '${funcName}' shadows a built-in function`, 
+              line: lineIndex, 
+              column: originalLine.indexOf(funcName), 
+              severity: 'warning', 
+              source: 'semantic-analyzer' 
+            });
+          }
+          declaredFunctions.set(funcName, { line: lineIndex, conditional: isConditional });
         }
-        declaredFunctions.set(funcName, lineIndex);
       }
 
       if (!trimmedLine.startsWith('#')) {
@@ -377,22 +423,14 @@ class DiagnosticManager {
       });
     }
 
-    if (this.shouldHaveSemicolon(cleanedLine.trim())) {
-      warnings.push({
-        message: 'Possible missing semicolon',
-        line: lineIndex,
-        column: originalLine.length,
-        severity: 'warning',
-        source: 'syntax-checker'
-      });
-    }
+
   }
 
   checkInvalidSyntax(originalLine, cleanedLine, lineIndex, warnings) {
     if (cleanedLine.includes('= =')) {
       const column = originalLine.indexOf('= =');
       warnings.push({
-        message: 'Invalid assignment operator "= =", did you mean "==" or "="?',
+        message: 'Invalid assignment operator "= =". did you mean "==" or "="?',
         line: lineIndex,
         column: column,
         severity: 'error',
@@ -427,45 +465,7 @@ class DiagnosticManager {
     }
   }
 
-  shouldHaveSemicolon(line) {
-    const trimmed = line.trim();
-    
-    if (!trimmed || 
-        trimmed.endsWith(';') || 
-        trimmed.endsWith('{') || 
-        trimmed.endsWith('}') || 
-        trimmed.startsWith('#') ||
-        trimmed.startsWith('//') ||
-        trimmed.startsWith('/*') ||
-        trimmed.startsWith('*') ||
-        trimmed.includes('if(') ||
-        trimmed.includes('if (') ||
-        trimmed.includes('while(') ||
-        trimmed.includes('while (') ||
-        trimmed.includes('for(') ||
-        trimmed.includes('for (') ||
-        trimmed.includes('else') ||
-        trimmed.includes('task ') ||
-        trimmed.includes('void ') ||
-        trimmed.match(/^\s*(int|float|bool|byte|char|string|typedef|struct|enum)\s+\w+\s*[({]/) ||
-        trimmed.includes('switch(') ||
-        trimmed.includes('switch (') ||
-        trimmed.includes('case ') ||
-        trimmed.includes('default:') ||
-        trimmed.match(/^\s*}\s*$/) ||
-        trimmed.match(/^\s*{\s*$/) ||
-        trimmed.match(/^\s*}\s*else/) ||
-        trimmed.match(/^\s*return\s*;?\s*$/) ||
-        trimmed.match(/^\s*break\s*;?\s*$/) ||
-        trimmed.match(/^\s*continue\s*;?\s*$/) ||
-        trimmed.match(/^\s*\w+\s+\w+\s*\([^)]*\)\s*\{?\s*$/) ||
-        trimmed.match(/^\s*\/\//) ||
-        trimmed.match(/^\s*#/)) {
-      return false;
-    }
-    
-    return false;
-  }
+
 
   checkUnterminatedStrings(line, lineIndex, warnings) {
     let inString = false;
@@ -528,7 +528,7 @@ class DiagnosticManager {
   findVariableDeclarationLine(sourceCode, varName) {
     const lines = sourceCode.split(/\r?\n/);
     for (let i = 0; i < lines.length; i++) {
-      const regex = new RegExp(`\\b(?:int|float|byte|char|string|bool|mutex)\\s+${varName}\\b`);
+      const regex = new RegExp(`\b(?:int|float|byte|char|string|bool|mutex)\s+${varName}\b`);
       if (regex.test(lines[i])) {
         return i;
       }
@@ -539,7 +539,7 @@ class DiagnosticManager {
   findFunctionCallLine(sourceCode, funcName) {
     const lines = sourceCode.split(/\r?\n/);
     for (let i = 0; i < lines.length; i++) {
-      const regex = new RegExp(`\\b${funcName}\\s*\\(`);
+      const regex = new RegExp(`\b${funcName}\s*\(`);
       if (regex.test(lines[i])) {
         return i;
       }

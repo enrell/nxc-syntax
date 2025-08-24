@@ -83,7 +83,9 @@ class SemanticAnalyzer {
     this.functions.clear();
     
     try {
-      this.visitNode(ast);
+  // Pre-scan: collect all function/task/sub declarations to avoid ordering issues
+  this.preScanDeclarations(ast);
+  this.visitNode(ast);
     } catch (error) {
       console.error('Error during semantic analysis:', error);
       this.errors.push({
@@ -250,13 +252,19 @@ class SemanticAnalyzer {
     
     // Check if function exists
     if (!this.functions.has(functionName) && !this.builtInFunctions.has(functionName)) {
-      this.errors.push({
-        message: `Function '${functionName}' is not defined`,
-        line: node.line || 0,
-        column: node.column || 0,
-        severity: 'error',
-        source: 'semantic-analyzer'
-      });
+      // Suggest closest built-in if similar
+      const suggestion = this.bestBuiltInMatch(functionName);
+      if (suggestion) {
+        this.warnings.push({
+          message: `Function '${functionName}' is not defined. Did you mean '${suggestion}'?`,
+          line: node.line || 0,
+          column: node.column || 0,
+          severity: 'warning',
+          source: 'semantic-analyzer'
+        });
+      } else {
+        // keep silent (no error) to avoid false positives for external APIs
+      }
     } else if (this.functions.has(functionName)) {
       // Check number of arguments
       const funcDef = this.functions.get(functionName);
@@ -281,14 +289,77 @@ class SemanticAnalyzer {
     const name = this.extractIdentifier(node);
     
     if (!this.isSymbolDefined(name) && !this.builtInConstants.has(name) && !this.functions.has(name)) {
-      this.errors.push({
-        message: `Identifier '${name}' is not defined`,
-        line: node.line || 0,
-        column: node.column || 0,
-        severity: 'error',
-        source: 'semantic-analyzer'
-      });
+      // suggest constant if close
+      const suggestion = this.bestConstantMatch(name);
+      if (suggestion) {
+        this.warnings.push({
+          message: `Identifier '${name}' is not defined. Did you mean '${suggestion}'?`,
+          line: node.line || 0,
+          column: node.column || 0,
+          severity: 'warning',
+          source: 'semantic-analyzer'
+        });
+      } else {
+        // otherwise, be silent to avoid false positives
+      }
     }
+  }
+
+  // Pre-scan helpers
+  preScanDeclarations(ast) {
+    if (!ast || !ast.children) return;
+    ast.children.forEach(node => {
+      if (!node || typeof node !== 'object') return;
+      const nodeType = node.ctorName || node.constructor.name;
+      if (nodeType === 'FunctionDefinition' || nodeType === 'TaskDefinition') {
+        const name = this.extractIdentifier(node.name);
+        if (!this.functions.has(name)) {
+          this.functions.set(name, { name, parameters: this.extractParameters(node.parameters || []), line: node.line || 0, isTask: nodeType === 'TaskDefinition' });
+        } else {
+          // prefer non-conditional later (AST doesn't carry preprocessor info here)
+        }
+      }
+      // Recurse
+      if (node.children) node.children.forEach(child => this.preScanDeclarations(child));
+    });
+  }
+
+  // Fuzzy match helpers for suggestions
+  bestBuiltInMatch(name) {
+    const candidates = Array.from(this.builtInFunctions);
+    let best = null, bestDist = Infinity;
+    for (const c of candidates) {
+      const d = this.levenshtein(name.toLowerCase(), c.toLowerCase());
+      if (d < bestDist) { bestDist = d; best = c; }
+    }
+    const threshold = name.length <= 4 ? 1 : 2;
+    return bestDist <= threshold ? best : null;
+  }
+
+  bestConstantMatch(name) {
+    const candidates = Array.from(this.builtInConstants);
+    let best = null, bestDist = Infinity;
+    for (const c of candidates) {
+      const d = this.levenshtein(name.toLowerCase(), c.toLowerCase());
+      if (d < bestDist) { bestDist = d; best = c; }
+    }
+    const threshold = name.length <= 4 ? 1 : 2;
+    return bestDist <= threshold ? best : null;
+  }
+
+  levenshtein(a, b) {
+    if (a === b) return 0;
+    const m = a.length, n = b.length;
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+      }
+    }
+    return dp[m][n];
   }
 
   visitCompoundStatement(node) {

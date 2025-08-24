@@ -82,85 +82,208 @@ class SimpleNXCParser {
     const lines = sourceCode.split(/\r?\n/);
     const cleanedLines = cleanedCode.split(/\r?\n/);
     
-    const builtInFunctions = this.loadBuiltInFunctions();
-    const declaredFunctions = new Set(builtInFunctions);
-    const calledFunctions = new Map();
+  const builtInFunctions = this.loadBuiltInFunctions();
+  // declaredFunctions will map name -> { line, conditional }
+  const declaredFunctions = new Map();
+  // initialize built-ins as declared (non-conditional)
+  builtInFunctions.forEach(fn => declaredFunctions.set(fn, { line: -1, conditional: false }));
+  const calledFunctions = new Map();
     
     // FIX: Add a set to store the names of all defined macros
     const declaredMacros = new Set();
     
     let scopes = [new Map()];
 
+  // Track preprocessor conditional nesting so we can avoid flagging duplicates across branches
+  let conditionalDepth = 0;
+    // First pass: collect macros and declarations
     cleanedLines.forEach((cleanedLine, lineIndex) => {
       const originalLine = lines[lineIndex];
       const trimmed = cleanedLine.trim();
-      
-      if (!trimmed) {
-        return;
+
+      if (!trimmed) return;
+
+      const macroDefinition = trimmed.match(/^\s*#\s*define\s+([a-zA-Z_][a-zA-Z0-9_]*)/);
+      if (macroDefinition) declaredMacros.add(macroDefinition[1]);
+
+      const pp = trimmed.match(/^#\s*(if|ifdef|ifndef|else|endif)\b/);
+      if (pp) {
+        const directive = pp[1];
+        if (directive === 'if' || directive === 'ifdef' || directive === 'ifndef') conditionalDepth++;
+        else if (directive === 'endif') conditionalDepth = Math.max(0, conditionalDepth - 1);
       }
 
-      // FIX: Look for macro definitions and add them to our set
-      const macroDefinition = trimmed.match(/^\s*#\s*define\s+([a-zA-Z_][a-zA-Z0-9_]*)/);
-      if (macroDefinition) {
-        const macroName = macroDefinition[1];
-        declaredMacros.add(macroName);
-      }
-      
-      const funcDeclaration = trimmed.match(/^\s*(?:task|sub|void|int|float|byte|char|string|bool|long|short|unsigned)\s+(\w+)\s*\(/);
+      const funcDeclaration = trimmed.match(/^\s*(?:(?:inline|safecall|static)\s+)*?(?:task|sub|void|int|float|byte|char|string|bool|long|short|unsigned)\s+(\w+)\s*\(/);
       if (funcDeclaration) {
         const funcName = funcDeclaration[1];
-        const column = originalLine.indexOf(funcName);
-        if (declaredFunctions.has(funcName)) {
-          this.addError(`Function '${funcName}' already defined`, lineIndex, column, funcName.length);
+        const isConditional = conditionalDepth > 0;
+        if (!declaredFunctions.has(funcName)) {
+          declaredFunctions.set(funcName, { line: lineIndex, conditional: isConditional });
         } else {
-          declaredFunctions.add(funcName);
-        }
-      }
-      
-      const varDeclarationMatch = trimmed.match(/^\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+(\w+)/);
-      if (varDeclarationMatch) {
-        const varName = varDeclarationMatch[2];
-        const column = originalLine.indexOf(varName);
-        if (column >= 0) {
-          const currentScope = scopes[scopes.length - 1];
-          if (currentScope.has(varName)) {
-            const existing = currentScope.get(varName);
-            this.addError(`Variable '${varName}' already declared at line ${existing.line + 1}`, lineIndex, column, varName.length);
+          const existing = declaredFunctions.get(funcName);
+          // Flag as error if both are non-conditional OR if one is non-conditional (will conflict)
+          if (!existing.conditional && !isConditional) {
+            const column = originalLine.indexOf(funcName);
+            this.addError(`Function/task '${funcName}' already declared at line ${existing.line + 1}`, lineIndex, column, funcName.length);
+          } else if (!existing.conditional || !isConditional) {
+            const column = originalLine.indexOf(funcName);
+            this.addError(`Function/task '${funcName}' conflicts with declaration at line ${existing.line + 1}`, lineIndex, column, funcName.length);
           } else {
-            currentScope.set(varName, { line: lineIndex, column, used: false });
+            // Both are conditional - that's fine, they're in different preprocessor branches
+          }
+          
+          // Update to keep the non-conditional one if there is one
+          if (existing.conditional && !isConditional) {
+            declaredFunctions.set(funcName, { line: lineIndex, conditional: false });
           }
         }
       }
+    });
+
+    // Second pass: validate calls/usages
+    conditionalDepth = 0;
+    let inMultilineMacro = false;
+    cleanedLines.forEach((cleanedLine, lineIndex) => {
+      const originalLine = lines[lineIndex];
+      const trimmed = cleanedLine.trim();
+      if (!trimmed) return;
+
+      // Check if we're continuing a multiline macro from previous line
+      if (lineIndex > 0) {
+        const prevLine = lines[lineIndex - 1].trim();
+        if (prevLine.endsWith('\\')) {
+          inMultilineMacro = true;
+        } else {
+          inMultilineMacro = false;
+        }
+      }
+
+      // Check if this line starts a multiline macro
+      if (trimmed.startsWith('#define') && originalLine.trim().endsWith('\\')) {
+        inMultilineMacro = true;
+      }
+
+      // Skip processing if we're in a multiline macro continuation
+      if (inMultilineMacro && !trimmed.startsWith('#')) {
+        return;
+      }
+
+      const pp = trimmed.match(/^#\s*(if|ifdef|ifndef|else|endif)\b/);
+      if (pp) {
+        const directive = pp[1];
+        if (directive === 'if' || directive === 'ifdef' || directive === 'ifndef') conditionalDepth++;
+        else if (directive === 'endif') conditionalDepth = Math.max(0, conditionalDepth - 1);
+      }
       
+      // Handle multiple variable declarations on the same line
+      // But skip for-loop variable declarations as they're handled separately
+      const allVarDeclarations = [...trimmed.matchAll(/\b(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\s*,\s*[a-zA-Z_][a-zA-Z0-9_]*)*)/g)];
+      allVarDeclarations.forEach(match => {
+        // Skip if this is a for-loop variable declaration
+        if (trimmed.match(/for\s*\(\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+/)) {
+          return;
+        }
+        
+        const type = match[1];
+        const varList = match[2];
+        // Handle comma-separated variable declarations
+        const varNames = varList.split(',').map(v => v.trim().split(/\s+/)[0].replace(/[=\[\]();].*/,''));
+        
+        varNames.forEach(varName => {
+          if (varName && varName.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/)) {
+            const column = originalLine.indexOf(varName);
+            if (column >= 0) {
+              const currentScope = scopes[scopes.length - 1];
+              if (currentScope.has(varName)) {
+                const existing = currentScope.get(varName);
+                this.addError(`Variable '${varName}' already declared at line ${existing.line + 1}`, lineIndex, column, varName.length);
+              } else {
+                currentScope.set(varName, { line: lineIndex, column, used: false });
+              }
+            }
+          }
+        });
+      });
+      
+      // Handle for loop variable declarations like "for (int i = 1000; ...)"
+      const forLoopVarMatch = trimmed.match(/for\s*\(\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+(\w+)/);
+      if (forLoopVarMatch) {
+        const varName = forLoopVarMatch[2];
+        const column = originalLine.indexOf(varName);
+        if (column >= 0) {
+          // For-loop variable declarations create a new scope (like in C)
+          // This allows shadowing of outer scope variables
+          scopes.push(new Map());
+          const forLoopScope = scopes[scopes.length - 1];
+          forLoopScope.set(varName, { line: lineIndex, column, used: false });
+        }
+      }
+      
+      // Handle scope changes from braces AFTER for-loop variable handling
+      const openCount = (cleanedLine.match(/{/g) || []).length;
+      for (let i = 0; i < openCount; i++) {
+        // Only create new scope if we haven't already created one for a for-loop
+        if (!forLoopVarMatch) {
+          scopes.push(new Map());
+        }
+      }
+      
+      // collect function calls and var usages for the second pass
       const funcCalls = [...trimmed.matchAll(/(\w+)\s*\(/g)];
       funcCalls.forEach(match => {
         const funcName = match[1];
         if (!this.isKeyword(funcName)) {
           const column = originalLine.indexOf(funcName);
-          if (column >= 0) {
-            calledFunctions.set(funcName, { line: lineIndex, column });
-          }
+          if (column >= 0) calledFunctions.set(funcName, { line: lineIndex, column });
         }
       });
+
+  const funcDeclaration = trimmed.match(/^\s*(?:(?:inline|safecall|static)\s+)*?(?:task|sub|void|int|float|byte|char|string|bool|long|short|unsigned)\s+(\w+)\s*\(/);
       
-      if (!varDeclarationMatch && !funcDeclaration) {
-        const varUsages = [...trimmed.matchAll(/\b(\w+)\b/g)];
+      // Parse function parameters and add them to current scope
+      if (funcDeclaration) {
+        const funcMatch = trimmed.match(/^\s*(?:(?:inline|safecall|static)\s+)*?(?:task|sub|void|int|float|byte|char|string|bool|long|short|unsigned)\s+\w+\s*\(([^)]*)\)/);
+        if (funcMatch && funcMatch[1].trim()) {
+          const params = funcMatch[1].split(',');
+          params.forEach(param => {
+            const paramMatch = param.trim().match(/^\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+(\w+)/);
+            if (paramMatch) {
+              const paramName = paramMatch[2];
+              const currentScope = scopes[scopes.length - 1];
+              if (!currentScope.has(paramName)) {
+                const column = originalLine.indexOf(paramName);
+                currentScope.set(paramName, { line: lineIndex, column: column >= 0 ? column : 0, used: false });
+              }
+            }
+          });
+        }
+      }
+  
+      // Check variable usage in all non-preprocessor lines and non-macro continuation lines
+      if (!trimmed.startsWith('#') && !inMultilineMacro) {
+        const varUsages = [...trimmed.matchAll(/\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g)];
         varUsages.forEach(match => {
           const varName = match[1];
-          if (!this.isKeyword(varName)) {
+          if (!this.isKeyword(varName) && !declaredMacros.has(varName) && !builtInFunctions.has(varName) && !this.isBuiltInConstant(varName)) {
+            let found = false;
             for (let s = scopes.length - 1; s >= 0; s--) {
               if (scopes[s].has(varName)) {
                 scopes[s].get(varName).used = true;
+                found = true;
                 break;
+              }
+            }
+            // Check if it's an undefined variable (but not in function calls or variable declarations)
+            if (!found && 
+                !trimmed.match(new RegExp(`\\b${varName}\\s*\\(`)) && 
+                !trimmed.match(new RegExp(`^\\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\\s+${varName}\\b`))) {
+              const column = originalLine.indexOf(varName);
+              if (column >= 0) {
+                this.addError(`Variable '${varName}' is not defined`, lineIndex, column, varName.length);
               }
             }
           }
         });
-      }
-      
-      const openCount = (cleanedLine.match(/{/g) || []).length;
-      for (let i = 0; i < openCount; i++) {
-        scopes.push(new Map());
       }
       
       const closeCount = (cleanedLine.match(/}/g) || []).length;
@@ -170,6 +293,24 @@ class SimpleNXCParser {
         }
       }
     });
+
+    // Additional semantic/syntax check: disallow array access immediately after a braced initializer
+    // e.g. int y = {1, 2, 3}[0];  --> invalid in NXC
+    try {
+      const badInitRegex = /=\s*\{[\s\S]*?\}\s*\[/g; // matches '=' then a braced initializer then '['
+      let m;
+      while ((m = badInitRegex.exec(cleanedCode)) !== null) {
+        const idx = m.index;
+        // compute line/column
+        const upto = sourceCode.substring(0, idx);
+        const lineNum = upto.split(/\r?\n/).length - 1;
+        const col = upto.split(/\r?\n/).pop().length;
+        this.addError("Array access on braced initializer is not allowed", lineNum, col);
+      }
+    } catch (err) {
+      // don't crash analysis on regex issues
+      console.warn('Error checking braced-initializer accesses:', err.message);
+    }
     
     scopes.forEach(scope => {
       for (const [varName, info] of scope) {
@@ -183,10 +324,36 @@ class SimpleNXCParser {
       }
     });
     
-    // FIX: When checking for undefined functions, also check if the name is a known macro
+    // Reintroduce helpful warnings: if an undefined function closely matches a built-in name,
+    // warn with suggestion. Otherwise, do not warn to avoid noisy diagnostics.
+    function levenshtein(a, b) {
+      if (a === b) return 0;
+      const m = a.length, n = b.length;
+      const dp = Array.from({ length: m + 1 }, () => new Array(n + 1));
+      for (let i = 0; i <= m; i++) dp[i][0] = i;
+      for (let j = 0; j <= n; j++) dp[0][j] = j;
+      for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+          const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+          dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+        }
+      }
+      return dp[m][n];
+    }
+
+    const builtInsArray = Array.from(builtInFunctions);
     for (const [funcName, info] of calledFunctions) {
-      if (!declaredFunctions.has(funcName) && !declaredMacros.has(funcName)) {
-        this.addError(`Function '${funcName}' is not defined`, info.line, info.column, funcName.length);
+      if (declaredFunctions.has(funcName) || declaredMacros.has(funcName)) continue;
+      // find best match among built-ins
+      let best = null;
+      let bestDist = Infinity;
+      for (const bi of builtInsArray) {
+        const d = levenshtein(funcName.toLowerCase(), bi.toLowerCase());
+        if (d < bestDist) { bestDist = d; best = bi; }
+      }
+      const threshold = funcName.length <= 4 ? 1 : 2;
+      if (best && bestDist <= threshold) {
+        this.addWarning(`Function '${funcName}' is not defined. Did you mean '${best}'?`, info.line, info.column, funcName.length);
       }
     }
   }
@@ -345,6 +512,23 @@ class SimpleNXCParser {
     return keywords.has(word);
   }
 
+  isBuiltInConstant(word) {
+    const constants = new Set([
+      'TRUE', 'FALSE', 'NULL', 'true', 'false',
+      'OUT_A', 'OUT_B', 'OUT_C', 'OUT_AB', 'OUT_AC', 'OUT_BC', 'OUT_ABC',
+      'IN_1', 'IN_2', 'IN_3', 'IN_4', 
+      'SENSOR_1', 'SENSOR_2', 'SENSOR_3', 'SENSOR_4',
+      'LCD_LINE1', 'LCD_LINE2', 'LCD_LINE3', 'LCD_LINE4', 'LCD_LINE5', 'LCD_LINE6', 'LCD_LINE7', 'LCD_LINE8',
+      'NO_ERR', 'ERR_ARG', 'ERR_INVAL', 'ERR_FILE', 'ERR_COMM',
+      'COL_BLACK', 'COL_BLUE', 'COL_GREEN', 'COL_YELLOW', 'COL_RED', 'COL_WHITE', 'COL_BROWN',
+      // Output mode constants
+      'OUT_MODE_MOTORON', 'OUT_MODE_BRAKE', 'OUT_MODE_REGULATED', 'OUT_MODE_COAST',
+      'OUT_REGMODE_IDLE', 'OUT_REGMODE_SPEED', 'OUT_REGMODE_SYNC',
+      'OUT_RUNSTATE_IDLE', 'OUT_RUNSTATE_RAMPUP', 'OUT_RUNSTATE_RUNNING', 'OUT_RUNSTATE_RAMPDOWN'
+    ]);
+    return constants.has(word);
+  }
+
   checkLinePatterns(line, lineIndex) {
     const trimmed = line.trim();
     
@@ -353,7 +537,7 @@ class SimpleNXCParser {
     }
     
     if (this.shouldHaveSemicolon(trimmed)) {
-      this.addWarning('Possible missing semicolon', lineIndex, line.length);
+      this.addWarning('Missing semicolon', lineIndex, line.length - 1);
     }
     
     if (line.length > 120) {
@@ -376,33 +560,56 @@ class SimpleNXCParser {
   shouldHaveSemicolon(line) {
     const trimmed = line.trim();
     
-    if (!trimmed || 
+    // Remove inline comments for analysis
+    const codeOnly = trimmed.replace(/\/\/.*$/, '').trim();
+    
+    // Lines that should NOT have semicolons
+    if (!codeOnly || 
         trimmed.startsWith('//') || 
         trimmed.startsWith('/*') || 
         trimmed.startsWith('*') ||
-        trimmed.endsWith(';') || 
-        trimmed.endsWith('{') || 
-        trimmed.endsWith('}') || 
+        codeOnly.endsWith(';') || 
+        codeOnly.endsWith('{') || 
+        codeOnly.endsWith('}') || 
         trimmed.startsWith('#') ||
-        trimmed.includes('if(') ||
-        trimmed.includes('if (') ||
-        trimmed.includes('while(') ||
-        trimmed.includes('while (') ||
-        trimmed.includes('for(') ||
-        trimmed.includes('for (') ||
-        trimmed.includes('else') ||
-        trimmed.includes('task ') ||
-        trimmed.includes('sub ') ||
-        trimmed.includes('void ') ||
-        trimmed.match(/^\s*(int|float|bool|byte|char|string|typedef|struct|enum)\s/) ||
-        trimmed.includes('switch(') ||
-        trimmed.includes('switch (') ||
-        trimmed.includes('case ') ||
-        trimmed.includes('default:') ||
-        trimmed.match(/^\s*}\s*$/) ||
-        trimmed.match(/^\s*{\s*$/) ||
-        trimmed.match(/^\s*\w+\s+\w+\s*\([^)]*\)\s*\{?\s*$/)) {
+        codeOnly.match(/^\s*}\s*$/) ||
+        codeOnly.match(/^\s*{\s*$/) ||
+        codeOnly.match(/^\s*}\s*else/)) {
       return false;
+    }
+    
+    // Control structures that don't need semicolons
+    if (codeOnly.match(/^\s*(if|while|for|until|repeat|switch)\s*\(/) ||
+        codeOnly.match(/^\s*else\s*$/) ||
+        codeOnly.includes('case ') ||
+        codeOnly.includes('default:')) {
+      return false;
+    }
+    
+    // Function/task declarations don't need semicolons
+    if (codeOnly.match(/^\s*(task|sub|void|int|float|bool|byte|char|string|long|short|unsigned)\s+\w+\s*\([^)]*\)\s*\{?\s*$/)) {
+      return false;
+    }
+    
+    // Variable declarations that should have semicolons
+    if (codeOnly.match(/^\s*(int|float|bool|byte|char|string|long|short|unsigned)\s+\w+/)) {
+      return true;
+    }
+    
+    // Assignment statements that should have semicolons
+    if (codeOnly.match(/^\s*\w+\s*=/)) {
+      return true;
+    }
+    
+    // Function calls that should have semicolons (but not control structures)
+    if (codeOnly.match(/^\s*\w+\s*\([^)]*\)\s*$/) && 
+        !codeOnly.match(/^\s*(if|while|for|until|repeat|switch)\s*\(/)) {
+      return true;
+    }
+    
+    // Return, break, continue statements
+    if (codeOnly.match(/^\s*(return|break|continue)(\s|$)/)) {
+      return true;
     }
     
     return false;
