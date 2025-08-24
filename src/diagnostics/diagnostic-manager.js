@@ -25,7 +25,6 @@ class DiagnosticManager {
     const uri = document.uri.toString();
     console.log(`Starting document analysis: ${document.fileName}`);
 
-    // Avoid duplicate analyses
     if (this.analysisQueue.has(uri)) {
       console.log(`Analysis already in progress for: ${document.fileName}`);
       return;
@@ -51,169 +50,158 @@ class DiagnosticManager {
 
     console.log(`Analyzing ${sourceCode.length} characters in ${document.fileName}`);
 
-    // Document cache to avoid unnecessary re-analyses
     const cachedVersion = this.documentCache.get(cacheKey);
-    
     if (cachedVersion && cachedVersion.version === document.version) {
       console.log(`Using cache for ${document.fileName}`);
-      return; // Document hasn't changed
+      return;
     }
 
-    // Syntactic analysis
+    const cleanedCode = this.removeCommentsAndStrings(sourceCode);
+
     console.log('Executing syntactic analysis...');
     const syntaxResult = this.parser.validateSyntax(sourceCode);
     console.log(`Syntactic analysis: ${syntaxResult.errors.length} errors, ${syntaxResult.warnings.length} warnings`);
-    
-    // Basic semantic analysis
+
+    const bracketCheckResult = this.checkBalancedBrackets(cleanedCode);
+    console.log(`Bracket balance check: ${bracketCheckResult.errors.length} errors`);
+
     console.log('Executing semantic analysis...');
     let semanticResult = { errors: [], warnings: [] };
     try {
-      semanticResult = this.performBasicSemanticAnalysis(sourceCode, document);
+      semanticResult = this.performBasicSemanticAnalysis(sourceCode, cleanedCode, document);
       console.log(`Semantic analysis: ${semanticResult.errors.length} errors, ${semanticResult.warnings.length} warnings`);
     } catch (error) {
       console.warn('Error in semantic analysis:', error);
     }
 
-    // Combine all diagnostics
     const allDiagnostics = [
       ...this.convertToDiagnostics(syntaxResult.errors, document),
       ...this.convertToDiagnostics(syntaxResult.warnings, document),
+      ...this.convertToDiagnostics(bracketCheckResult.errors, document),
       ...this.convertToDiagnostics(semanticResult.errors, document),
       ...this.convertToDiagnostics(semanticResult.warnings, document)
     ];
 
     console.log(`Total diagnostics: ${allDiagnostics.length}`);
-
-    // Update diagnostics in VS Code
     this.diagnosticCollection.set(uri, allDiagnostics);
-
-    // Update cache
-    this.documentCache.set(cacheKey, {
-      version: document.version,
-      diagnostics: allDiagnostics
-    });
+    this.documentCache.set(cacheKey, { version: document.version, diagnostics: allDiagnostics });
   }
 
-  performBasicSemanticAnalysis(sourceCode, document) {
+  checkBalancedBrackets(cleanedCode) {
+    const errors = [];
+    const stack = [];
+    const lines = cleanedCode.split(/\r?\n/);
+
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      const line = lines[lineIndex];
+      for (let columnIndex = 0; columnIndex < line.length; columnIndex++) {
+        const char = line[columnIndex];
+        if (['(', '{', '['].includes(char)) {
+          stack.push({ char, line: lineIndex, column: columnIndex });
+        } else if (char === ')') {
+          if (stack.length === 0 || stack[stack.length - 1].char !== '(') {
+            errors.push({ message: "Unexpected closing parenthesis ')'", line: lineIndex, column: columnIndex, severity: 'error', source: 'syntax-checker' });
+            return { errors };
+          }
+          stack.pop();
+        } else if (char === '}') {
+          if (stack.length === 0 || stack[stack.length - 1].char !== '{') {
+            errors.push({ message: "Unexpected closing brace '}'", line: lineIndex, column: columnIndex, severity: 'error', source: 'syntax-checker' });
+            return { errors };
+          }
+          stack.pop();
+        } else if (char === ']') {
+          if (stack.length === 0 || stack[stack.length - 1].char !== '[') {
+            errors.push({ message: "Unexpected closing bracket ']'", line: lineIndex, column: columnIndex, severity: 'error', source: 'syntax-checker' });
+            return { errors };
+          }
+          stack.pop();
+        }
+      }
+    }
+
+    if (stack.length > 0) {
+      const unclosed = stack.pop();
+      errors.push({ message: `Unclosed '${unclosed.char}'`, line: unclosed.line, column: unclosed.column, severity: 'error', source: 'syntax-checker' });
+    }
+
+    return { errors };
+  }
+
+  performBasicSemanticAnalysis(sourceCode, cleanedCode, document) {
     const errors = [];
     const warnings = [];
     
-    // Remove comments and strings to avoid false positives
-    const cleanedCode = this.removeCommentsAndStrings(sourceCode);
     const lines = sourceCode.split(/\r?\n/);
     const cleanedLines = cleanedCode.split(/\r?\n/);
 
     console.log(`Semantic analysis: processing ${lines.length} lines`);
 
-    // Load NXC built-in functions
     const builtInFunctions = this.loadBuiltInFunctions();
-    
-    // Basic analysis of common patterns
-    const declaredVariables = new Map(); // name -> declaration line
-    const usedVariables = new Set();
-    const declaredFunctions = new Map(); // name -> declaration line
+    const declaredVariables = new Map();
+    const declaredFunctions = new Map();
     const calledFunctions = new Set();
+    // FIX: Add a set to store the names of all defined macros
+    const declaredMacros = new Set();
 
     cleanedLines.forEach((cleanedLine, lineIndex) => {
       const originalLine = lines[lineIndex];
       const trimmedLine = cleanedLine.trim();
       
-      // Skip empty lines
       if (!trimmedLine) {
         return;
       }
 
-      // Detect variable declarations (but not in struct definitions or function parameters)
+      // FIX: Look for macro definitions and add them to our set
+      const macroDefinition = trimmedLine.match(/^\s*#\s*define\s+([a-zA-Z_][a-zA-Z0-9_]*)/);
+      if (macroDefinition) {
+        const macroName = macroDefinition[1];
+        console.log(`Found macro definition: ${macroName}`);
+        declaredMacros.add(macroName);
+      }
+
       const varDeclaration = trimmedLine.match(/^\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+(\w+)/);
       if (varDeclaration && !trimmedLine.includes('typedef') && !trimmedLine.includes('struct')) {
         const varName = varDeclaration[2];
-        console.log(`Found variable declaration: ${varName} at line ${lineIndex}`);
-        
-        // Only flag as duplicate if it's in the same scope (simplified check)
-        if (declaredVariables.has(varName)) {
-          const prevLine = declaredVariables.get(varName);
-          // Only report error if declarations are close together (likely same scope)
-          if (Math.abs(lineIndex - prevLine) < 50) {
-            errors.push({
-              message: `Variable '${varName}' already declared at line ${prevLine + 1}`,
-              line: lineIndex,
-              column: originalLine.indexOf(varName),
-              severity: 'error',
-              source: 'semantic-analyzer'
-            });
-          }
-        } else {
-          declaredVariables.set(varName, lineIndex);
+        if (!declaredVariables.has(varName)) {
+            declaredVariables.set(varName, lineIndex);
         }
       }
 
-      // Detect function/task declarations
       const funcDeclaration = trimmedLine.match(/^\s*(?:task|sub|void|int|float|byte|char|string|bool|long|short|unsigned)\s+(\w+)\s*\(/);
       if (funcDeclaration) {
         const funcName = funcDeclaration[1];
-        console.log(`Found function declaration: ${funcName} at line ${lineIndex}`);
-        
-        // Check for duplicates (including built-in functions if they're being redefined)
         if (declaredFunctions.has(funcName)) {
           const prevLine = declaredFunctions.get(funcName);
-          errors.push({
-            message: `Function/task '${funcName}' already declared at line ${prevLine + 1}`,
-            line: lineIndex,
-            column: originalLine.indexOf(funcName),
-            severity: 'error',
-            source: 'semantic-analyzer'
-          });
+          errors.push({ message: `Function/task '${funcName}' already declared at line ${prevLine + 1}`, line: lineIndex, column: originalLine.indexOf(funcName), severity: 'error', source: 'semantic-analyzer' });
         } else if (builtInFunctions.has(funcName) && funcName !== 'main') {
-          // Warn about redefining built-in functions (except main which is expected)
-          warnings.push({
-            message: `Function '${funcName}' shadows a built-in function`,
-            line: lineIndex,
-            column: originalLine.indexOf(funcName),
-            severity: 'warning',
-            source: 'semantic-analyzer'
-          });
+          warnings.push({ message: `Function '${funcName}' shadows a built-in function`, line: lineIndex, column: originalLine.indexOf(funcName), severity: 'warning', source: 'semantic-analyzer' });
         }
-        
         declaredFunctions.set(funcName, lineIndex);
       }
 
-      // Detect function calls (only in cleaned code to avoid comments)
-      const funcCalls = trimmedLine.matchAll(/(\w+)\s*\(/g);
-      for (const match of funcCalls) {
-        const funcName = match[1];
-        // Skip keywords that look like function calls
-        if (!this.isKeywordOrType(funcName)) {
-          calledFunctions.add(funcName);
+      if (!trimmedLine.startsWith('#')) {
+        const funcCalls = trimmedLine.matchAll(/(\w+)\s*\(/g);
+        for (const match of funcCalls) {
+          const funcName = match[1];
+          if (!this.isKeywordOrType(funcName)) {
+            calledFunctions.add(funcName);
+          }
         }
       }
 
-      // Variable usage detection removed - was causing too many false positives
-
-      // Check problematic patterns
-      this.checkLinePatterns(originalLine, lineIndex, warnings);
+      this.checkLinePatterns(originalLine, cleanedLine, lineIndex, warnings);
     });
 
-    // Variable usage detection removed due to false positives
-    // TODO: Implement more robust variable usage analysis in the future
-
-    // Check undefined functions (only for actual function calls, not comments)
+    // FIX: When checking for undefined functions, also check if the name is a known macro
     for (const funcName of calledFunctions) {
-      if (!declaredFunctions.has(funcName) && !builtInFunctions.has(funcName)) {
+      if (!declaredFunctions.has(funcName) && !builtInFunctions.has(funcName) && !declaredMacros.has(funcName)) {
         const callLine = this.findFunctionCallLine(cleanedCode, funcName);
         if (callLine >= 0) {
-          console.log(`Undefined function: ${funcName} (called at line ${callLine})`);
-          errors.push({
-            message: `Function '${funcName}' is not defined`,
-            line: callLine,
-            column: 0,
-            severity: 'error',
-            source: 'semantic-analyzer'
-          });
+          errors.push({ message: `Function '${funcName}' is not defined`, line: callLine, column: 0, severity: 'error', source: 'semantic-analyzer' });
         }
       }
     }
-
-    console.log(`Semantic analysis completed: ${errors.length} errors, ${warnings.length} warnings`);
 
     return { errors, warnings };
   }
@@ -233,7 +221,7 @@ class DiagnosticManager {
       if (escaped) {
         escaped = false;
         if (!inSingleLineComment && !inMultiLineComment) {
-          result += ' '; // Replace with space to maintain positions
+          result += ' ';
         }
         continue;
       }
@@ -249,9 +237,9 @@ class DiagnosticManager {
       if (inSingleLineComment) {
         if (char === '\n') {
           inSingleLineComment = false;
-          result += char; // Keep newlines
+          result += char;
         } else {
-          result += ' '; // Replace comment with space
+          result += ' ';
         }
         continue;
       }
@@ -259,10 +247,10 @@ class DiagnosticManager {
       if (inMultiLineComment) {
         if (char === '*' && nextChar === '/') {
           inMultiLineComment = false;
-          result += '  '; // Replace */ with spaces
-          i++; // Skip next char
+          result += '  ';
+          i++;
         } else {
-          result += char === '\n' ? char : ' '; // Keep newlines, replace others with space
+          result += char === '\n' ? char : ' ';
         }
         continue;
       }
@@ -271,7 +259,7 @@ class DiagnosticManager {
         if (char === '"') {
           inString = false;
         }
-        result += ' '; // Replace string content with space
+        result += ' ';
         continue;
       }
 
@@ -279,26 +267,24 @@ class DiagnosticManager {
         if (char === "'") {
           inChar = false;
         }
-        result += ' '; // Replace char content with space
+        result += ' ';
         continue;
       }
 
-      // Check for comment start
       if (char === '/' && nextChar === '/') {
         inSingleLineComment = true;
-        result += '  '; // Replace // with spaces
-        i++; // Skip next char
+        result += '  ';
+        i++;
         continue;
       }
 
       if (char === '/' && nextChar === '*') {
         inMultiLineComment = true;
-        result += '  '; // Replace /* with spaces
-        i++; // Skip next char
+        result += '  ';
+        i++;
         continue;
       }
 
-      // Check for string/char start
       if (char === '"') {
         inString = true;
         result += ' ';
@@ -324,7 +310,6 @@ class DiagnosticManager {
       const fs = require('fs');
       const path = require('path');
       
-      // Load from NXC API file
       const apiPath = path.join(__dirname, '../../utils/nxc_api.txt');
       if (fs.existsSync(apiPath)) {
         const apiContent = fs.readFileSync(apiPath, 'utf8');
@@ -332,7 +317,6 @@ class DiagnosticManager {
           .map(line => line.trim())
           .filter(line => line && !line.startsWith('//'))
           .map(line => {
-            // Extract function name from signature like "OnFwd(byte outputs, char pwr)"
             const match = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/);
             return match ? match[1] : null;
           })
@@ -345,7 +329,6 @@ class DiagnosticManager {
       console.warn('Could not load NXC API file:', error.message);
     }
     
-    // Add essential built-ins as fallback (only real NXC built-in functions)
     const essentialFunctions = [
       'OnFwd', 'OnRev', 'Off', 'Wait', 'CurrentTick', 'Sensor', 'ColorSensor', 'SensorUS',
       'SetSensorColorFull', 'SetSensorUltrasonic', 'ResetRotationCount', 'MotorRotationCount',
@@ -358,7 +341,7 @@ class DiagnosticManager {
       'Sin', 'Cos', 'Tan', 'ASin', 'ACos', 'ATan', 'ATan2', 'Sinh', 'Cosh', 'Tanh',
       'Exp', 'Log', 'Log10', 'Sqrt', 'Pow', 'Ceil', 'Floor', 'Trunc', 'Frac', 'Sign',
       'Abs', 'Max', 'Min', 'Constrain', 'Map', 'Random', 'SRandom',
-      'main' // main is expected to be defined by user
+      'main'
     ];
     
     essentialFunctions.forEach(fn => builtInFunctions.add(fn));
@@ -366,21 +349,15 @@ class DiagnosticManager {
     return builtInFunctions;
   }
 
-  checkLinePatterns(line, lineIndex, warnings) {
-    // Skip comment lines entirely
-    const trimmed = line.trim();
-    if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*') || !trimmed) {
+  checkLinePatterns(originalLine, cleanedLine, lineIndex, warnings) {
+    if (!originalLine.trim()) {
       return;
     }
 
-    // Check for invalid syntax patterns
-    this.checkInvalidSyntax(trimmed, lineIndex, warnings);
-    
-    // Check for unterminated strings
-    this.checkUnterminatedStrings(line, lineIndex, warnings);
+    this.checkInvalidSyntax(originalLine, cleanedLine, lineIndex, warnings);
+    this.checkUnterminatedStrings(originalLine, lineIndex, warnings);
 
-    // Line too long
-    if (line.length > 120) {
+    if (originalLine.length > 120) {
       warnings.push({
         message: 'Line too long (>120 characters)',
         line: lineIndex,
@@ -390,8 +367,7 @@ class DiagnosticManager {
       });
     }
 
-    // Mixed tabs and spaces
-    if (line.includes('\t') && line.includes('  ')) {
+    if (originalLine.includes('\t') && originalLine.includes('  ')) {
       warnings.push({
         message: 'Mixed tabs and spaces for indentation',
         line: lineIndex,
@@ -401,22 +377,20 @@ class DiagnosticManager {
       });
     }
 
-    // Missing semicolon (improved heuristic)
-    if (this.shouldHaveSemicolon(trimmed)) {
+    if (this.shouldHaveSemicolon(cleanedLine.trim())) {
       warnings.push({
         message: 'Possible missing semicolon',
         line: lineIndex,
-        column: line.length,
+        column: originalLine.length,
         severity: 'warning',
         source: 'syntax-checker'
       });
     }
   }
 
-  checkInvalidSyntax(line, lineIndex, warnings) {
-    // Check for invalid assignment patterns like "= ="
-    if (line.includes('= =')) {
-      const column = line.indexOf('= =');
+  checkInvalidSyntax(originalLine, cleanedLine, lineIndex, warnings) {
+    if (cleanedLine.includes('= =')) {
+      const column = originalLine.indexOf('= =');
       warnings.push({
         message: 'Invalid assignment operator "= =", did you mean "==" or "="?',
         line: lineIndex,
@@ -426,11 +400,10 @@ class DiagnosticManager {
       });
     }
 
-    // Check for random character sequences (heuristic)
     const invalidPattern = /[a-zA-Z]{8,}\d{3,}=/;
-    if (invalidPattern.test(line)) {
-      const match = line.match(invalidPattern);
-      const column = line.indexOf(match[0]);
+    if (invalidPattern.test(cleanedLine)) {
+      const match = originalLine.match(invalidPattern);
+      const column = originalLine.indexOf(match[0]);
       warnings.push({
         message: 'Invalid syntax: unexpected character sequence',
         line: lineIndex,
@@ -440,11 +413,10 @@ class DiagnosticManager {
       });
     }
 
-    // Check for multiple consecutive operators
     const multipleOps = /[=+\-*/%]{3,}/;
-    if (multipleOps.test(line)) {
-      const match = line.match(multipleOps);
-      const column = line.indexOf(match[0]);
+    if (multipleOps.test(cleanedLine)) {
+      const match = originalLine.match(multipleOps);
+      const column = originalLine.indexOf(match[0]);
       warnings.push({
         message: 'Invalid syntax: multiple consecutive operators',
         line: lineIndex,
@@ -458,7 +430,6 @@ class DiagnosticManager {
   shouldHaveSemicolon(line) {
     const trimmed = line.trim();
     
-    // Skip if already has semicolon or is a control structure
     if (!trimmed || 
         trimmed.endsWith(';') || 
         trimmed.endsWith('{') || 
@@ -487,17 +458,13 @@ class DiagnosticManager {
         trimmed.match(/^\s*return\s*;?\s*$/) ||
         trimmed.match(/^\s*break\s*;?\s*$/) ||
         trimmed.match(/^\s*continue\s*;?\s*$/) ||
-        // Function definitions
         trimmed.match(/^\s*\w+\s+\w+\s*\([^)]*\)\s*\{?\s*$/) ||
-        // Comments only
         trimmed.match(/^\s*\/\//) ||
-        // Preprocessor directives
         trimmed.match(/^\s*#/)) {
       return false;
     }
     
-    // Only flag obvious cases that need semicolons
-    return false; // Disable this check for now as it's too aggressive
+    return false;
   }
 
   checkUnterminatedStrings(line, lineIndex, warnings) {
@@ -518,9 +485,8 @@ class DiagnosticManager {
         continue;
       }
       
-      // Check for comment start - ignore strings in comments
       if (!inString && char === '/' && line[i + 1] === '/') {
-        break; // Rest of line is comment
+        break;
       }
       
       if (char === '"') {
@@ -534,7 +500,6 @@ class DiagnosticManager {
       }
     }
     
-    // If we're still in a string at the end of the line, it's unterminated
     if (inString && stringStart >= 0) {
       warnings.push({
         message: 'Unterminated string literal',
@@ -548,19 +513,13 @@ class DiagnosticManager {
 
   isKeywordOrType(word) {
     const keywords = new Set([
-      // Control flow
       'if', 'else', 'while', 'for', 'do', 'switch', 'case', 'default',
       'break', 'continue', 'return', 'goto', 'repeat', 'until',
-      // Function/task keywords
       'task', 'sub', 'void', 'inline', 'safecall',
-      // Types
       'int', 'float', 'byte', 'char', 'string', 'bool', 'mutex', 'long', 'short', 'unsigned', 'signed', 'const',
       'struct', 'enum', 'typedef', 'variant',
-      // Literals
       'true', 'false', 'TRUE', 'FALSE', 'NULL',
-      // NXC specific
       'start', 'stop', 'priority', 'asm',
-      // Preprocessor (without #)
       'define', 'include', 'import', 'download', 'ifdef', 'ifndef', 'endif', 'pragma'
     ]);
     return keywords.has(word);

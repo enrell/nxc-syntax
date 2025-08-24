@@ -42,23 +42,19 @@ class SimpleNXCParser {
   analyzeBasicSyntax(sourceCode) {
     const lines = sourceCode.split(/\r?\n/);
     
-    // Reset counters
     this.braceCount = 0;
     this.parenCount = 0;
     this.bracketCount = 0;
     this.braceStack = [];
     
-    // First step: check warnings on all lines
     lines.forEach((line, lineIndex) => {
       this.checkLinePatterns(line, lineIndex);
     });
     
-    // Second step: check balancing (improved to handle strings and comments)
     lines.forEach((line, lineIndex) => {
       this.checkBalancing(line, lineIndex);
     });
     
-    // Check for unclosed braces
     if (this.braceCount > 0) {
       const lastBrace = this.braceStack[this.braceStack.length - 1];
       if (lastBrace) {
@@ -68,50 +64,48 @@ class SimpleNXCParser {
       }
     }
     
-    // Check unclosed parentheses
     if (this.parenCount > 0) {
       this.addError('Unbalanced parentheses - missing closing parentheses', lines.length - 1, 0);
     }
     
-    // Check unclosed brackets
     if (this.bracketCount > 0) {
       this.addError('Unbalanced brackets - missing closing brackets', lines.length - 1, 0);
     }
     
-    // Basic semantic analysis
     this.performSemanticAnalysis(sourceCode);
     
     console.log(`SimpleParser: Found ${this.errors.length} errors and ${this.warnings.length} warnings`);
   }
 
   performSemanticAnalysis(sourceCode) {
-    // Remove comments and strings to avoid false positives
     const cleanedCode = this.removeCommentsAndStrings(sourceCode);
     const lines = sourceCode.split(/\r?\n/);
     const cleanedLines = cleanedCode.split(/\r?\n/);
     
-    // Load built-in functions
     const builtInFunctions = this.loadBuiltInFunctions();
-    
-    // Track functions
     const declaredFunctions = new Set(builtInFunctions);
+    const calledFunctions = new Map();
     
-    // Track called functions
-    const calledFunctions = new Map(); // name -> {line, column}
+    // FIX: Add a set to store the names of all defined macros
+    const declaredMacros = new Set();
     
-    // Scope stack for variables: array of Maps (index 0 is global)
-    let scopes = [new Map()]; // Start with global scope
-    
+    let scopes = [new Map()];
+
     cleanedLines.forEach((cleanedLine, lineIndex) => {
       const originalLine = lines[lineIndex];
       const trimmed = cleanedLine.trim();
       
-      // Skip empty lines
       if (!trimmed) {
         return;
       }
+
+      // FIX: Look for macro definitions and add them to our set
+      const macroDefinition = trimmed.match(/^\s*#\s*define\s+([a-zA-Z_][a-zA-Z0-9_]*)/);
+      if (macroDefinition) {
+        const macroName = macroDefinition[1];
+        declaredMacros.add(macroName);
+      }
       
-      // Detect function/task declarations
       const funcDeclaration = trimmed.match(/^\s*(?:task|sub|void|int|float|byte|char|string|bool|long|short|unsigned)\s+(\w+)\s*\(/);
       if (funcDeclaration) {
         const funcName = funcDeclaration[1];
@@ -123,7 +117,6 @@ class SimpleNXCParser {
         }
       }
       
-      // Detect variable declarations
       const varDeclarationMatch = trimmed.match(/^\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+(\w+)/);
       if (varDeclarationMatch) {
         const varName = varDeclarationMatch[2];
@@ -139,7 +132,6 @@ class SimpleNXCParser {
         }
       }
       
-      // Detect function calls
       const funcCalls = [...trimmed.matchAll(/(\w+)\s*\(/g)];
       funcCalls.forEach(match => {
         const funcName = match[1];
@@ -151,13 +143,11 @@ class SimpleNXCParser {
         }
       });
       
-      // Detect variable usage (excluding declaration lines and function def lines)
       if (!varDeclarationMatch && !funcDeclaration) {
         const varUsages = [...trimmed.matchAll(/\b(\w+)\b/g)];
         varUsages.forEach(match => {
           const varName = match[1];
           if (!this.isKeyword(varName)) {
-            // Find the variable in scopes, from inner to outer
             for (let s = scopes.length - 1; s >= 0; s--) {
               if (scopes[s].has(varName)) {
                 scopes[s].get(varName).used = true;
@@ -168,7 +158,6 @@ class SimpleNXCParser {
         });
       }
       
-      // Update scopes based on braces in this line
       const openCount = (cleanedLine.match(/{/g) || []).length;
       for (let i = 0; i < openCount; i++) {
         scopes.push(new Map());
@@ -182,12 +171,11 @@ class SimpleNXCParser {
       }
     });
     
-    // Check unused variables (lenient)
     scopes.forEach(scope => {
       for (const [varName, info] of scope) {
         if (!info.used && 
-            !varName.match(/^[A-Z_][A-Z0-9_]*$/) && // Skip constants
-            !varName.startsWith('g') && // Skip globals prefix
+            !varName.match(/^[A-Z_][A-Z0-9_]*$/) &&
+            !varName.startsWith('g') &&
             varName !== 'main' &&
             varName.length > 1) {
           // this.addWarning(`Variable '${varName}' declared but never used`, info.line, info.column, varName.length);
@@ -195,9 +183,9 @@ class SimpleNXCParser {
       }
     });
     
-    // Check undefined functions
+    // FIX: When checking for undefined functions, also check if the name is a known macro
     for (const [funcName, info] of calledFunctions) {
-      if (!declaredFunctions.has(funcName)) {
+      if (!declaredFunctions.has(funcName) && !declaredMacros.has(funcName)) {
         this.addError(`Function '${funcName}' is not defined`, info.line, info.column, funcName.length);
       }
     }
@@ -307,7 +295,6 @@ class SimpleNXCParser {
       const fs = require('fs');
       const path = require('path');
       
-      // Load from NXC API file
       const apiPath = path.join(__dirname, '../../utils/nxc_api.txt');
       if (fs.existsSync(apiPath)) {
         const apiContent = fs.readFileSync(apiPath, 'utf8');
@@ -326,7 +313,6 @@ class SimpleNXCParser {
       console.warn('Could not load NXC API file:', error.message);
     }
     
-    // Add essential built-ins as fallback (only real NXC built-in functions)
     const essentialFunctions = [
       'OnFwd', 'OnRev', 'Off', 'Wait', 'CurrentTick', 'Sensor', 'ColorSensor', 'SensorUS',
       'SetSensorColorFull', 'SetSensorUltrasonic', 'ResetRotationCount', 'MotorRotationCount',
@@ -339,7 +325,6 @@ class SimpleNXCParser {
       'Sin', 'Cos', 'Tan', 'ASin', 'ACos', 'ATan', 'ATan2', 'Sinh', 'Cosh', 'Tanh',
       'Exp', 'Log', 'Log10', 'Sqrt', 'Pow', 'Ceil', 'Floor', 'Trunc', 'Frac', 'Sign',
       'Abs', 'Max', 'Min', 'Constrain', 'Map', 'Random', 'SRandom'
-      // Removed 'main' as it should be user-defined
     ];
     
     essentialFunctions.forEach(fn => builtInFunctions.add(fn));
@@ -363,31 +348,25 @@ class SimpleNXCParser {
   checkLinePatterns(line, lineIndex) {
     const trimmed = line.trim();
     
-    // Skip comment lines entirely
     if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*') || !trimmed) {
       return;
     }
     
-    // Check missing semicolon (heuristic)
     if (this.shouldHaveSemicolon(trimmed)) {
       this.addWarning('Possible missing semicolon', lineIndex, line.length);
     }
     
-    // Check line too long
     if (line.length > 120) {
       this.addWarning('Line too long (>120 characters)', lineIndex, 120);
     }
     
-    // Check mixed tabs and spaces in indentation
     const leadingWhitespace = line.match(/^[\t ]+/);
     if (leadingWhitespace && leadingWhitespace[0].includes('\t') && leadingWhitespace[0].includes(' ')) {
       this.addWarning('Mixed tabs and spaces for indentation', lineIndex, 0);
     }
     
-    // Check unterminated strings
     this.checkUnterminatedStrings(line, lineIndex);
     
-    // Check unterminated characters
     const charMatches = trimmed.match(/'/g);
     if (charMatches && charMatches.length % 2 !== 0) {
       this.addError('Unterminated character literal', lineIndex, trimmed.indexOf("'"));
@@ -397,7 +376,6 @@ class SimpleNXCParser {
   shouldHaveSemicolon(line) {
     const trimmed = line.trim();
     
-    // Skip various cases
     if (!trimmed || 
         trimmed.startsWith('//') || 
         trimmed.startsWith('/*') || 
@@ -423,12 +401,10 @@ class SimpleNXCParser {
         trimmed.includes('default:') ||
         trimmed.match(/^\s*}\s*$/) ||
         trimmed.match(/^\s*{\s*$/) ||
-        // Function definitions
         trimmed.match(/^\s*\w+\s+\w+\s*\([^)]*\)\s*\{?\s*$/)) {
       return false;
     }
     
-    // Currently disabled
     return false;
   }
 
@@ -482,13 +458,12 @@ class SimpleNXCParser {
       }
       
       if (inString && char === '/' && next === '/') {
-        // Potential comment start while in string - treat as unterminated
         this.addError('Unterminated string literal before comment', lineIndex, stringStart);
-        return; // Stop checking this line
+        return;
       }
       
       if (!inString && char === '/' && next === '/') {
-        break; // Comment starts, stop checking
+        break;
       }
       
       if (char === '"') {
@@ -526,29 +501,24 @@ class SimpleNXCParser {
         continue;
       }
       
-      // Check for comment start
       if (!inString && char === '/' && nextChar === '/') {
         inComment = true;
-        break; // Rest of line is comment
+        break;
       }
       
-      // Skip if we're in a comment
       if (inComment) {
         break;
       }
       
-      // Handle strings
       if (char === '"') {
         inString = !inString;
         continue;
       }
       
-      // Skip balancing checks if we're inside a string
       if (inString) {
         continue;
       }
       
-      // Check balancing for characters outside strings and comments
       switch (char) {
         case '{':
           this.braceCount++;
