@@ -13,30 +13,63 @@ class SemanticAnalyzer {
   }
 
   initializeBuiltIns() {
-    // Common NXC built-in functions
-    const builtIns = [
-      'OnFwd', 'OnRev', 'OnFwdRev', 'OnFwdSync', 'OnRevSync', 'OnFwdRevSync',
-      'RotateMotor', 'RotateMotorEx', 'RotateMotorPID',
-      'SetSensorType', 'SetSensorMode', 'ReadSensor', 'ReadSensorUS', 'ReadSensorHT',
-      'PlayTone', 'PlaySound', 'PlayFile',
-      'Wait', 'Random', 'Abs', 'Sign',
-      'Sin', 'Cos', 'Tan', 'ASin', 'ACos', 'ATan', 'ATan2',
-      'Sqrt', 'Exp', 'Log', 'Log10', 'Ceil', 'Floor',
-      'OpenFileRead', 'OpenFileWrite', 'OpenFileAppend', 'CloseFile',
-      'ReadBytes', 'WriteBytes', 'ReadString', 'WriteString',
-      'NumToStr', 'StrToNum', 'StrLen', 'StrCat', 'SubStr', 'StrIndex',
-      'ArrayLen', 'ArrayInit', 'ArraySubset', 'ArrayBuild'
-    ];
+    // Load NXC API functions from utils file
+    const fs = require('fs');
+    const path = require('path');
     
-    builtIns.forEach(fn => this.builtInFunctions.add(fn));
+    try {
+      // Load API functions
+      const apiPath = path.join(__dirname, '../../utils/nxc_api.txt');
+      const apiContent = fs.readFileSync(apiPath, 'utf8');
+      const apiFunctions = apiContent.split('\n')
+        .map(line => line.trim())
+        .filter(line => line && !line.startsWith('//'))
+        .map(line => {
+          // Extract function name from signature like "OnFwd(byte outputs, char pwr)"
+          const match = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/);
+          return match ? match[1] : null;
+        })
+        .filter(name => name);
+      
+      apiFunctions.forEach(fn => this.builtInFunctions.add(fn));
+      
+      // Load constants
+      const constantsPath = path.join(__dirname, '../../utils/nxc_constants.txt');
+      if (fs.existsSync(constantsPath)) {
+        const constantsContent = fs.readFileSync(constantsPath, 'utf8');
+        const constants = constantsContent.split('\n')
+          .map(line => line.trim())
+          .filter(line => line && !line.startsWith('//'));
+        constants.forEach(constant => this.builtInConstants.add(constant));
+      }
+      
+      // Load keywords
+      const keywordsPath = path.join(__dirname, '../../utils/nxc_keywords.txt');
+      if (fs.existsSync(keywordsPath)) {
+        const keywordsContent = fs.readFileSync(keywordsPath, 'utf8');
+        const keywords = keywordsContent.split('\n')
+          .map(line => line.trim())
+          .filter(line => line && !line.startsWith('//'));
+        keywords.forEach(keyword => this.builtInConstants.add(keyword));
+      }
+      
+    } catch (error) {
+      console.warn('Could not load NXC API files, using fallback:', error.message);
+      // Fallback to basic set
+      const builtIns = [
+        'OnFwd', 'OnRev', 'Off', 'Wait', 'CurrentTick', 'Sensor', 'ColorSensor', 'SensorUS',
+        'SetSensorColorFull', 'SetSensorUltrasonic', 'ResetRotationCount', 'MotorRotationCount',
+        'Sin', 'Cos', 'Tan', 'abs', 'clamp', 'now', 'if', 'while', 'switch', 'return'
+      ];
+      builtIns.forEach(fn => this.builtInFunctions.add(fn));
+    }
     
     // Built-in constants
     const constants = [
-      'TRUE', 'FALSE', 'NULL',
+      'TRUE', 'FALSE', 'NULL', 'true', 'false',
       'OUT_A', 'OUT_B', 'OUT_C', 'OUT_AB', 'OUT_AC', 'OUT_BC', 'OUT_ABC',
-      'IN_1', 'IN_2', 'IN_3', 'IN_4',
-      'SENSOR_TYPE_TOUCH', 'SENSOR_TYPE_LIGHT', 'SENSOR_TYPE_SOUND', 'SENSOR_TYPE_ULTRASONIC',
-      'SOUND_CLICK', 'SOUND_BEEP', 'SOUND_DOUBLE_BEEP'
+      'IN_1', 'IN_2', 'IN_3', 'IN_4', 'M_LEFT', 'M_RIGHT', 'M_SHOVEL', 'M_DRIVE',
+      'COL_BLACK', 'COL_BLUE', 'COL_GREEN', 'COL_YELLOW', 'COL_RED', 'COL_WHITE', 'COL_BROWN'
     ];
     
     constants.forEach(constant => this.builtInConstants.add(constant));

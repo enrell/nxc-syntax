@@ -41,3 +41,5 @@ coverage/
 *.sublime-workspace
 
 bun.lock
+
+test.nxc
