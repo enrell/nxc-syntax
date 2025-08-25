@@ -2,10 +2,12 @@ const vscode = require('vscode');
 const fs = require('fs');
 const path = require('path');
 const { DiagnosticManager } = require('./diagnostics/diagnostic-manager');
+const { NXCFormatter } = require('./formatter/nxc-formatter');
 
 class NXCExtension {
   constructor() {
     this.diagnosticManager = null;
+    this.formatter = new NXCFormatter();
     this.cache = { 
       functions: new Map(), 
       constants: new Set(), 
@@ -78,7 +80,21 @@ class NXCExtension {
       }
     }, '(', ',');
 
-    context.subscriptions.push(completionProvider, hoverProvider, signatureProvider);
+    // Document formatting provider
+    const formattingProvider = vscode.languages.registerDocumentFormattingEditProvider('nxc', {
+      provideDocumentFormattingEdits: (document, options) => {
+        return this.provideDocumentFormattingEdits(document, options);
+      }
+    });
+
+    // Document range formatting provider
+    const rangeFormattingProvider = vscode.languages.registerDocumentRangeFormattingEditProvider('nxc', {
+      provideDocumentRangeFormattingEdits: (document, range, options) => {
+        return this.provideDocumentRangeFormattingEdits(document, range, options);
+      }
+    });
+
+    context.subscriptions.push(completionProvider, hoverProvider, signatureProvider, formattingProvider, rangeFormattingProvider);
   }
 
   setupDocumentEvents(context) {
@@ -104,7 +120,23 @@ class NXCExtension {
       }
     });
 
-    context.subscriptions.push(onDidOpenTextDocument, onDidChangeTextDocument, onDidCloseTextDocument);
+    // Format on save if enabled
+    const onWillSaveTextDocument = vscode.workspace.onWillSaveTextDocument(event => {
+      if (event.document.languageId === 'nxc') {
+        const config = vscode.workspace.getConfiguration('nxc.formatting');
+        if (config.get('formatOnSave', false)) {
+          const edits = this.provideDocumentFormattingEdits(event.document, {
+            tabSize: vscode.workspace.getConfiguration('editor').get('tabSize', 4),
+            insertSpaces: vscode.workspace.getConfiguration('editor').get('insertSpaces', true)
+          });
+          if (edits && edits.length > 0) {
+            event.waitUntil(Promise.resolve(edits));
+          }
+        }
+      }
+    });
+
+    context.subscriptions.push(onDidOpenTextDocument, onDidChangeTextDocument, onDidCloseTextDocument, onWillSaveTextDocument);
 
     // Analyze already open documents
     vscode.workspace.textDocuments.forEach(document => {
@@ -149,7 +181,15 @@ class NXCExtension {
       vscode.window.showInformationMessage('Diagnostics cleared');
     });
 
-    context.subscriptions.push(rebuildIndexCommand, reparseCommand, clearDiagnosticsCommand);
+    // Command to format document
+    const formatDocumentCommand = vscode.commands.registerCommand('nxc.formatDocument', () => {
+      const editor = vscode.window.activeTextEditor;
+      if (editor && editor.document.languageId === 'nxc') {
+        vscode.commands.executeCommand('editor.action.formatDocument');
+      }
+    });
+
+    context.subscriptions.push(rebuildIndexCommand, reparseCommand, clearDiagnosticsCommand, formatDocumentCommand);
   }
 
   setupFileWatchers(context) {
@@ -469,6 +509,26 @@ class NXCExtension {
     }
     
     return '0';
+  }
+
+  provideDocumentFormattingEdits(document, options) {
+    try {
+      return this.formatter.formatDocument(document, options);
+    } catch (error) {
+      console.error('Error formatting document:', error);
+      vscode.window.showErrorMessage(`Error formatting NXC document: ${error.message}`);
+      return [];
+    }
+  }
+
+  provideDocumentRangeFormattingEdits(document, range, options) {
+    try {
+      return this.formatter.formatRange(document, range, options);
+    } catch (error) {
+      console.error('Error formatting range:', error);
+      vscode.window.showErrorMessage(`Error formatting NXC range: ${error.message}`);
+      return [];
+    }
   }
 
   deactivate() {
