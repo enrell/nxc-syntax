@@ -148,6 +148,9 @@ class SimpleNXCParser {
       const trimmed = cleanedLine.trim();
       if (!trimmed) return;
 
+      // Check for function declaration early in the loop
+      const funcDeclaration = trimmed.match(/^\s*(?:(?:inline|safecall|static)\s+)*?(?:task|sub|void|int|float|byte|char|string|bool|long|short|unsigned)\s+(\w+)\s*\(/);
+
       // Check if we're continuing a multiline macro from previous line
       if (lineIndex > 0) {
         const prevLine = lines[lineIndex - 1].trim();
@@ -176,11 +179,16 @@ class SimpleNXCParser {
       }
       
       // Handle multiple variable declarations on the same line
-      // But skip for-loop variable declarations as they're handled separately
+      // But skip for-loop variable declarations and function parameters as they're handled separately
       const allVarDeclarations = [...trimmed.matchAll(/\b(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\s*,\s*[a-zA-Z_][a-zA-Z0-9_]*)*)/g)];
       allVarDeclarations.forEach(match => {
         // Skip if this is a for-loop variable declaration
         if (trimmed.match(/for\s*\(\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+/)) {
+          return;
+        }
+        
+        // Skip if this is a function parameter declaration
+        if (funcDeclaration) {
           return;
         }
         
@@ -222,8 +230,8 @@ class SimpleNXCParser {
       // Handle scope changes from braces AFTER for-loop variable handling
       const openCount = (cleanedLine.match(/{/g) || []).length;
       for (let i = 0; i < openCount; i++) {
-        // Only create new scope if we haven't already created one for a for-loop
-        if (!forLoopVarMatch) {
+        // Only create new scope if we haven't already created one for a for-loop or function declaration
+        if (!forLoopVarMatch && !funcDeclaration) {
           scopes.push(new Map());
         }
       }
@@ -237,11 +245,11 @@ class SimpleNXCParser {
           if (column >= 0) calledFunctions.set(funcName, { line: lineIndex, column });
         }
       });
-
-  const funcDeclaration = trimmed.match(/^\s*(?:(?:inline|safecall|static)\s+)*?(?:task|sub|void|int|float|byte|char|string|bool|long|short|unsigned)\s+(\w+)\s*\(/);
       
-      // Parse function parameters and add them to current scope
+      // Parse function parameters and add them to a new function scope
       if (funcDeclaration) {
+        // Create a new scope for function parameters
+        scopes.push(new Map());
         const funcMatch = trimmed.match(/^\s*(?:(?:inline|safecall|static)\s+)*?(?:task|sub|void|int|float|byte|char|string|bool|long|short|unsigned)\s+\w+\s*\(([^)]*)\)/);
         if (funcMatch && funcMatch[1].trim()) {
           const params = funcMatch[1].split(',');
@@ -249,11 +257,9 @@ class SimpleNXCParser {
             const paramMatch = param.trim().match(/^\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+(\w+)/);
             if (paramMatch) {
               const paramName = paramMatch[2];
-              const currentScope = scopes[scopes.length - 1];
-              if (!currentScope.has(paramName)) {
-                const column = originalLine.indexOf(paramName);
-                currentScope.set(paramName, { line: lineIndex, column: column >= 0 ? column : 0, used: false });
-              }
+              const functionScope = scopes[scopes.length - 1];
+              // Function parameters are always in their own scope, no need to check for duplicates across functions
+              functionScope.set(paramName, { line: lineIndex, column: originalLine.indexOf(paramName), used: false });
             }
           });
         }
