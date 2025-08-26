@@ -15,6 +15,7 @@ Repository: https://github.com/enrell/nxc-syntax
 ## Features
 
 - **Syntax highlighting** for `.nxc` files
+- **Code formatting** with customizable indentation and style
 - **Real-time error detection** with configurable diagnostics
 - **Auto-completion** for functions and constants
 - **Hover information** for functions
@@ -40,6 +41,21 @@ Open any `.nxc` file in VS Code. The extension will:
 - Apply syntax highlighting based on the TextMate grammar
 - Provide diagnostics in the Problems panel for errors and warnings
 - Offer completions and hover information where available
+- Format your code using **Shift+Alt+F** or **Ctrl+Shift+I**
+
+### Code Formatting
+
+The extension includes a built-in code formatter that:
+- Properly indents code blocks and control structures
+- Formats operators with consistent spacing
+- Aligns function parameters and arguments
+- Handles preprocessor directives correctly
+- Supports both spaces and tabs for indentation
+
+**Keyboard Shortcuts:**
+- **Shift+Alt+F** - Format entire document
+- **Ctrl+Shift+I** - Format document (alternative)
+- Right-click → "Format Document" in context menu
 
 ## Development
 
@@ -68,7 +84,10 @@ The extension provides the following configuration options:
   "nxc.diagnostics.maxLineLength": 120,
   "nxc.diagnostics.checkUnusedVariables": true,
   "nxc.completion.suggestBuiltins": true,
-  "nxc.completion.parameterHints": true
+  "nxc.completion.parameterHints": true,
+  "nxc.formatting.indentSize": 4,
+  "nxc.formatting.useSpaces": true,
+  "nxc.formatting.formatOnSave": false
 }
 ```
 
@@ -80,6 +99,7 @@ The extension provides the following configuration options:
 
 ## Available Commands
 
+- **NXC: Format Document** - Format the current NXC document
 - **NXC: Rebuild Index** - Rebuild the symbol index
 - **NXC: Reparse Open Files** - Reanalyze all open files
 - **NXC: Clear All Diagnostics** - Clear all diagnostics

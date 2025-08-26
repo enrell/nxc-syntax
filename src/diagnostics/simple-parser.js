@@ -143,6 +143,35 @@ class SimpleNXCParser {
     // Second pass: validate calls/usages
     conditionalDepth = 0;
     let inMultilineMacro = false;
+    // Helper: split by top-level commas (ignore commas inside (), {}, [], or strings)
+    function splitTopLevelCommas(s) {
+      const parts = [];
+      let buf = '';
+      let paren = 0, brace = 0, bracket = 0;
+      let inString = false, inChar = false, escaped = false;
+      for (let i = 0; i < s.length; i++) {
+        const ch = s[i];
+        if (escaped) { buf += ch; escaped = false; continue; }
+        if (ch === '\\') { buf += ch; escaped = true; continue; }
+        if (ch === '"' && !inChar) { inString = !inString; buf += ch; continue; }
+        if (ch === "'" && !inString) { inChar = !inChar; buf += ch; continue; }
+        if (inString || inChar) { buf += ch; continue; }
+        if (ch === '(') { paren++; buf += ch; continue; }
+        if (ch === ')') { if (paren>0) paren--; buf += ch; continue; }
+        if (ch === '{') { brace++; buf += ch; continue; }
+        if (ch === '}') { if (brace>0) brace--; buf += ch; continue; }
+        if (ch === '[') { bracket++; buf += ch; continue; }
+        if (ch === ']') { if (bracket>0) bracket--; buf += ch; continue; }
+        if (ch === ',' && paren === 0 && brace === 0 && bracket === 0) {
+          parts.push(buf);
+          buf = '';
+          continue;
+        }
+        buf += ch;
+      }
+      if (buf.length) parts.push(buf);
+      return parts;
+    }
     cleanedLines.forEach((cleanedLine, lineIndex) => {
       const originalLine = lines[lineIndex];
       const trimmed = cleanedLine.trim();
@@ -180,22 +209,24 @@ class SimpleNXCParser {
       
       // Handle multiple variable declarations on the same line
       // But skip for-loop variable declarations and function parameters as they're handled separately
-      const allVarDeclarations = [...trimmed.matchAll(/\b(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\s*,\s*[a-zA-Z_][a-zA-Z0-9_]*)*)/g)];
-      allVarDeclarations.forEach(match => {
-        // Skip if this is a for-loop variable declaration
-        if (trimmed.match(/for\s*\(\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+/)) {
-          return;
-        }
-        
-        // Skip if this is a function parameter declaration
-        if (funcDeclaration) {
-          return;
-        }
+      // Match variable declarations but skip function declarations
+      if (!funcDeclaration) {
+        const allVarDeclarations = [...trimmed.matchAll(/\b(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\s*=\s*[^,;]+)?(?:\s*,\s*[a-zA-Z_][a-zA-Z0-9_]*(?:\s*=\s*[^,;]+)?)*)/g)];
+        allVarDeclarations.forEach(match => {
+          // Skip if this is a for-loop variable declaration
+          if (trimmed.match(/for\s*\(\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+/)) {
+            return;
+          }
         
         const type = match[1];
         const varList = match[2];
         // Handle comma-separated variable declarations
-        const varNames = varList.split(',').map(v => v.trim().split(/\s+/)[0].replace(/[=\[\]();].*/,''));
+        const varNames = splitTopLevelCommas(varList).map(v => {
+          const trimmed = v.trim();
+          // Extract variable name before any assignment, array brackets, or other operators
+          const match = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)/);
+          return match ? match[1] : null;
+        }).filter(name => name);
         
         varNames.forEach(varName => {
           if (varName && varName.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/)) {
@@ -211,7 +242,8 @@ class SimpleNXCParser {
             }
           }
         });
-      });
+        });
+      }
       
       // Handle for loop variable declarations like "for (int i = 1000; ...)"
       const forLoopVarMatch = trimmed.match(/for\s*\(\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+(\w+)/);
@@ -246,7 +278,7 @@ class SimpleNXCParser {
         }
       });
       
-      // Parse function parameters and add them to a new function scope
+      // Parse function parameters and add them to a new function scope BEFORE processing variable usage
       if (funcDeclaration) {
         // Create a new scope for function parameters
         scopes.push(new Map());
@@ -266,7 +298,8 @@ class SimpleNXCParser {
       }
   
       // Check variable usage in all non-preprocessor lines and non-macro continuation lines
-      if (!trimmed.startsWith('#') && !inMultilineMacro) {
+      // Skip variable usage checking on function declaration lines
+      if (!trimmed.startsWith('#') && !inMultilineMacro && !funcDeclaration) {
         const varUsages = [...trimmed.matchAll(/\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g)];
         varUsages.forEach(match => {
           const varName = match[1];
@@ -376,6 +409,13 @@ class SimpleNXCParser {
       const char = sourceCode[i];
       const nextChar = sourceCode[i + 1];
 
+      // helper: peek next non-whitespace character after index i
+      function peekNextNonSpace(idx) {
+        let j = idx + 1;
+        while (j < sourceCode.length && (sourceCode[j] === ' ' || sourceCode[j] === '\t')) j++;
+        return sourceCode[j];
+      }
+
       if (escaped) {
         escaped = false;
         if (!inSingleLineComment && !inMultiLineComment) {
@@ -429,14 +469,14 @@ class SimpleNXCParser {
         continue;
       }
 
-      if (char === '/' && nextChar === '/') {
+  if (char === '/' && (nextChar === '/' || peekNextNonSpace(i) === '/')) {
         inSingleLineComment = true;
         result += '  ';
         i++;
         continue;
       }
 
-      if (char === '/' && nextChar === '*') {
+  if (char === '/' && nextChar === '*') {
         inMultiLineComment = true;
         result += '  ';
         i++;

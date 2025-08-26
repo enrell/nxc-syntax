@@ -2,7 +2,7 @@
   "name": "nxc-syntax",
   "displayName": "NXC Syntax",
   "description": "A syntax highlighting and linter for the Not eXactly C (NXC) language (LEGO Mindstorms).",
-  "version": "1.4.0",
+  "version": "1.7.0",
   "publisher": "enrell",
   "engines": {
     "vscode": "^1.90.0"
@@ -73,6 +73,11 @@
         "command": "nxc.clearDiagnostics",
         "title": "NXC: Clear All Diagnostics",
         "category": "NXC"
+      },
+      {
+        "command": "nxc.formatDocument",
+        "title": "NXC: Format Document",
+        "category": "NXC"
       }
     ],
     "configuration": {
@@ -103,9 +108,36 @@
           "type": "boolean",
           "default": true,
           "description": "Show parameter hints in completion"
+        },
+        "nxc.formatting.indentSize": {
+          "type": "number",
+          "default": 4,
+          "description": "Number of spaces for indentation"
+        },
+        "nxc.formatting.useSpaces": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use spaces instead of tabs for indentation"
+        },
+        "nxc.formatting.formatOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically format NXC files on save"
         }
       }
-    }
+    },
+    "keybindings": [
+      {
+        "command": "nxc.formatDocument",
+        "key": "shift+alt+f",
+        "when": "editorTextFocus && editorLangId == nxc"
+      },
+      {
+        "command": "editor.action.formatDocument",
+        "key": "ctrl+shift+i",
+        "when": "editorTextFocus && editorLangId == nxc"
+      }
+    ]
   },
   "dependencies": {
     "ohm-js": "^17.2.1"

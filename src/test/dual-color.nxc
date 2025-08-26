@@ -1,133 +1,133 @@
-  #define PORT_COLOR_LEFT  IN_2
-  #define PORT_COLOR_RIGHT IN_3
-  #define PORT_US          IN_1
+#define PORT_COLOR_LEFT  IN_2
+#define PORT_COLOR_RIGHT IN_3
+#define PORT_US          IN_1
 
-  // Fallback raw RGB
-  #ifndef ColorSensorValue
-      #define ColorSensorValue(_p,_c) Sensor(_p)
-  #endif
+// Fallback raw RGB
+#ifndef ColorSensorValue
+#define ColorSensorValue(_p,_c) Sensor(_p)
+#endif
 
-  // Códigos de cor
-  #define C_UNKNOWN    0
-  #define C_WHITE      1
-  #define C_BLACK      2
-  #define C_RED        3
-  #define C_GREEN      4
-  #define C_DARKGREEN  5
-  #define C_SILVER     6
+// Códigos de cor
+#define C_UNKNOWN    0
+#define C_WHITE      1
+#define C_BLACK      2
+#define C_RED        3
+#define C_GREEN      4
+#define C_DARKGREEN  5
+#define C_SILVER     6
 
-  // Thresholds (com margem)
-  #define TH_WHITE_MIN        190   // branco 200+
-  #define TH_BLACK_MAX         80   // limite superior absoluto para considerar preto/dark region
-  #define TH_RED_R_MIN        190
-  #define TH_RED_G_MAX        120
-  #define TH_RED_B_MAX        140
-  #define TH_GREEN_G_MIN      115
-  #define TH_GREEN_G_HIGH     255
-  #define TH_DG_R_MIN          45   // dark green ranges (observado 50-65 / 65-80 / 55-65)
-  #define TH_DG_R_MAX          72
-  #define TH_DG_G_MIN          60
-  #define TH_DG_G_MAX          90
-  #define TH_DG_B_MIN          50
-  #define TH_DG_B_MAX          75
-  #define TH_DG_AVG_MIN        55   // média mínima para não cair em preto
-  #define TH_SILVER_MIN       160   // prata 170-210
-  #define TH_SILVER_MAX       220
-  #define TH_SILVER_DIFF_MAX   50   // tolera variação
+// Thresholds (com margem)
+#define TH_WHITE_MIN        190   // branco 200+
+#define TH_BLACK_MAX         80   // limite superior absoluto para considerar preto/dark region
+#define TH_RED_R_MIN        190
+#define TH_RED_G_MAX        120
+#define TH_RED_B_MAX        140
+#define TH_GREEN_G_MIN      115
+#define TH_GREEN_G_HIGH     255
+#define TH_DG_R_MIN          45   // dark green ranges (observado 50-65 / 65-80 / 55-65)
+#define TH_DG_R_MAX          72
+#define TH_DG_G_MIN          60
+#define TH_DG_G_MAX          90
+#define TH_DG_B_MIN          50
+#define TH_DG_B_MAX          75
+#define TH_DG_AVG_MIN        55   // média mínima para não cair em preto
+#define TH_SILVER_MIN       160   // prata 170-210
+#define TH_SILVER_MAX       220
+#define TH_SILVER_DIFF_MAX   50   // tolera variação
 
-    int max3(int a,int b,int c) { 
-        int m=a; 
-        if(b>m)m=b; 
-        if(c>m)m=c; 
-        return m;
+int max3(int a, int b, int c) {
+    int m = a;
+    if (b > m)m = b;
+    if (c > m)m = c;
+return m;
+}
+int min3(int a, int b, int c) {
+    int m = a;
+    if (b < m)m = b;
+    if (c < m)m = c;
+return m;
+}
+int avg3(int a, int b, int c) {
+    return (a + b + c)/ 3;
+}
+
+int classifyRGB(int r, int g, int b) {
+    int mx = max3(r, g, b);
+    int mn = min3(r, g, b);
+    int av = avg3(r, g, b);
+
+    // WHITE: todos altos
+    if (r >= TH_WHITE_MIN &  & g >= TH_WHITE_MIN &  & b >= TH_WHITE_MIN)return C_WHITE;
+
+    // SILVER: médio-alto, faixa estreita 170-210 (com margem) e pouca diferença entre canais
+    if (mx <= TH_SILVER_MAX &  & mn >= TH_SILVER_MIN &  &(mx - mn)<= TH_SILVER_DIFF_MAX)return C_SILVER;
+
+    // DARK GREEN: G dominante moderado, canais nas faixas, média acima de mínimo, evita classificar como black
+    if (g >= TH_DG_G_MIN &  & g <= TH_DG_G_MAX &  &
+    r >= TH_DG_R_MIN &  & r <= TH_DG_R_MAX &  &
+    b >= TH_DG_B_MIN &  & b <= TH_DG_B_MAX &  &
+g > r &  & g > b &  & av >= TH_DG_AVG_MIN)return C_DARKGREEN;
+
+// BLACK: todos baixos e média realmente baixa (mais restritivo que antes)
+if (r <= TH_BLACK_MAX &  & g <= TH_BLACK_MAX &  & b <= TH_BLACK_MAX &  & av < TH_DG_AVG_MIN)return C_BLACK;
+
+// RED: R muito alto e G,B mais baixos
+if (r >= TH_RED_R_MIN &  & g <= TH_RED_G_MAX &  & b <= TH_RED_B_MAX &  & r > g + 60 &  & r > b + 60)return C_RED;
+
+// GREEN geral: G dominante e alto
+if (g >= TH_GREEN_G_MIN &  & g > r &  & g > b)return C_GREEN;
+
+return C_UNKNOWN;
+
+}
+
+string codeToStr(int c) {
+    switch (c) {
+        case C_WHITE: return "WHIT";
+        case C_BLACK: return "BLK";
+        case C_RED: return "RED";
+        case C_GREEN: return "GRN";
+        case C_DARKGREEN: return "DG";
+        case C_SILVER: return "SILV";
     }
-    int min3(int a,int b,int c) { 
-        int m=a; 
-        if(b<m)m=b; 
-        if(c<m)m=c; 
-        return m; 
+    return "?";
+}
+
+task main() {
+    SetSensorColorFull(PORT_COLOR_LEFT);
+    SetSensorColorFull(PORT_COLOR_RIGHT);
+    SetSensorUltrasonic(PORT_US);
+
+    while (true) {
+        int rL = ColorSensorValue(PORT_COLOR_LEFT, 0);
+        int gL = ColorSensorValue(PORT_COLOR_LEFT, 1);
+        int bL = ColorSensorValue(PORT_COLOR_LEFT, 2);
+        int rR = ColorSensorValue(PORT_COLOR_RIGHT, 0);
+        int gR = ColorSensorValue(PORT_COLOR_RIGHT, 1);
+        int bR = ColorSensorValue(PORT_COLOR_RIGHT, 2);
+
+        int cL = classifyRGB(rL, gL, bL);
+        int cR = classifyRGB(rR, gR, bR);
+        int usVal = SensorUS(PORT_US); // cm
+
+        ClearScreen();
+        TextOut(0, LCD_LINE1, "L");
+        TextOut(60, LCD_LINE1, "R");
+
+        TextOut(0, LCD_LINE2, "R"); NumOut(10, LCD_LINE2, rL); NumOut(60, LCD_LINE2, rR);
+        TextOut(0, LCD_LINE3, "G"); NumOut(10, LCD_LINE3, gL); NumOut(60, LCD_LINE3, gR);
+        TextOut(0, LCD_LINE4, "B"); NumOut(10, LCD_LINE4, bL); NumOut(60, LCD_LINE4, bR);
+        TextOut(0, LCD_LINE5, codeToStr(cL));
+        TextOut(60, LCD_LINE5, codeToStr(cR));
+
+        // Linha 6: dif (prata) | US distância
+        int diffL = max3(rL, gL, bL)- min3(rL, gL, bL);
+        int diffR = max3(rR, gR, bR)- min3(rR, gR, bR);
+        TextOut(0, LCD_LINE6, "d"); NumOut(10, LCD_LINE6, diffL); NumOut(36, LCD_LINE6, diffR);
+        TextOut(60, LCD_LINE6, "US"); NumOut(78, LCD_LINE6, usVal);
+
+        Wait(120); /  / ~ 8 fps
     }
-    int avg3(int a,int b,int c) { 
-        return (a+b+c) / 3; 
-    }
-
-    int classifyRGB(int r,int g,int b) {
-      int mx = max3(r,g,b);
-      int mn = min3(r,g,b);
-      int av = avg3(r,g,b);
-
-      // WHITE: todos altos
-      if(r>=TH_WHITE_MIN && g>=TH_WHITE_MIN && b>=TH_WHITE_MIN) return C_WHITE;
-
-        // SILVER: médio-alto, faixa estreita 170-210 (com margem) e pouca diferença entre canais
-      if(mx<=TH_SILVER_MAX && mn>=TH_SILVER_MIN && (mx-mn)<=TH_SILVER_DIFF_MAX) return C_SILVER;
-
-        // DARK GREEN: G dominante moderado, canais nas faixas, média acima de mínimo, evita classificar como black
-        if(g>=TH_DG_G_MIN && g<=TH_DG_G_MAX &&
-            r>=TH_DG_R_MIN && r<=TH_DG_R_MAX &&
-            b>=TH_DG_B_MIN && b<=TH_DG_B_MAX &&
-            g>r && g>b && av>=TH_DG_AVG_MIN) return C_DARKGREEN;
-
-        // BLACK: todos baixos e média realmente baixa (mais restritivo que antes)
-        if(r<=TH_BLACK_MAX && g<=TH_BLACK_MAX && b<=TH_BLACK_MAX && av < TH_DG_AVG_MIN) return C_BLACK;
-
-      // RED: R muito alto e G,B mais baixos
-      if(r>=TH_RED_R_MIN && g<=TH_RED_G_MAX && b<=TH_RED_B_MAX && r>g+60 && r>b+60) return C_RED;
-
-      // GREEN geral: G dominante e alto
-      if(g>=TH_GREEN_G_MIN && g>r && g>b) return C_GREEN;
-
-      return C_UNKNOWN;
-      
-  }
-
-  string codeToStr(int c){
-      switch(c){
-          case C_WHITE: return "WHIT";
-          case C_BLACK: return "BLK";
-          case C_RED: return "RED";
-          case C_GREEN: return "GRN";
-          case C_DARKGREEN: return "DG";
-          case C_SILVER: return "SILV";
-      }
-      return "?";
-  }
-
-  task main(){
-      SetSensorColorFull(PORT_COLOR_LEFT);
-      SetSensorColorFull(PORT_COLOR_RIGHT);
-      SetSensorUltrasonic(PORT_US);
-
-      while(true){
-          int rL = ColorSensorValue(PORT_COLOR_LEFT,0);
-          int gL = ColorSensorValue(PORT_COLOR_LEFT,1);
-          int bL = ColorSensorValue(PORT_COLOR_LEFT,2);
-          int rR = ColorSensorValue(PORT_COLOR_RIGHT,0);
-          int gR = ColorSensorValue(PORT_COLOR_RIGHT,1);
-          int bR = ColorSensorValue(PORT_COLOR_RIGHT,2);
-
-      int cL = classifyRGB(rL,gL,bL);
-      int cR = classifyRGB(rR,gR,bR);
-      int usVal = SensorUS(PORT_US); // cm
-
-          ClearScreen();
-          TextOut(0,  LCD_LINE1, "L");
-          TextOut(60, LCD_LINE1, "R");
-
-          TextOut(0,  LCD_LINE2, "R"); NumOut(10, LCD_LINE2, rL); NumOut(60, LCD_LINE2, rR);
-          TextOut(0,  LCD_LINE3, "G"); NumOut(10, LCD_LINE3, gL); NumOut(60, LCD_LINE3, gR);
-          TextOut(0,  LCD_LINE4, "B"); NumOut(10, LCD_LINE4, bL); NumOut(60, LCD_LINE4, bR);
-          TextOut(0,  LCD_LINE5, codeToStr(cL));
-          TextOut(60, LCD_LINE5, codeToStr(cR));
-
-      // Linha 6: dif (prata) | US distância
-      int diffL = max3(rL,gL,bL)-min3(rL,gL,bL);
-      int diffR = max3(rR,gR,bR)-min3(rR,gR,bR);
-      TextOut(0, LCD_LINE6, "d"); NumOut(10, LCD_LINE6, diffL); NumOut(36, LCD_LINE6, diffR);
-      TextOut(60, LCD_LINE6, "US"); NumOut(78, LCD_LINE6, usVal);
-
-          Wait(120); // ~8 fps
-      }
-  }
+}
 
 
