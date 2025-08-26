@@ -1,0 +1,185 @@
+// Sensor de Cor Esquerdo = Porta 2
+// Sensor de Cor Direito  = Porta 3
+// Sensor de Distância    = Porta 1
+#define PORTA_COR_ESQUERDA  S2
+#define PORTA_COR_DIREITA   S3
+#define PORTA_ULTRASSOM     S1
+
+#define MOTOR_ESQUERDO OUT_A
+#define MOTOR_DIREITO  OUT_B
+
+// Dando um número para cada cor.
+#define COR_DESCONHECIDA  0
+#define COR_BRANCO        1
+#define COR_PRETO         2
+#define COR_VERMELHO      3
+#define COR_VERDE         4
+#define COR_VERDE_ESCURO  5
+#define COR_PRATA         6
+
+// --- Valores de referência calibrados ---
+#define BRANCO_R        187
+#define BRANCO_G        187
+#define BRANCO_B        190
+#define PRETO_R          53
+#define PRETO_G          39
+#define PRETO_B          33
+#define VERMELHO_R      190
+#define VERMELHO_G       50
+#define VERMELHO_B       50
+#define VERDE_R          50
+#define VERDE_G         180
+#define VERDE_B          50
+#define VERDE_ESCURO_R   60
+#define VERDE_ESCURO_G   75
+#define VERDE_ESCURO_B   60
+#define PRATA_R         180
+#define PRATA_G         180
+#define PRATA_B         180
+
+#define MARGEM_ERRO      20
+
+// Constantes do PID (ajustar conforme teste)
+#define KP 1.0
+#define KI 0.01
+#define KD 0.5
+
+#define VELOCIDADE_BASE 80
+
+// Função para verificar se um valor está dentro de uma faixa de referência
+int dentroDaFaixa(int valor, int referencia) {
+  return (valor >= referencia - MARGEM_ERRO)&  &(valor <= referencia + MARGEM_ERRO);
+}
+
+// Função para calcular a média de três números.
+int media(int valor1, int valor2, int valor3) {
+  return (valor1 + valor2 + valor3)/ 3;
+}
+
+// Função "Detetive de Cores" usando valores de referência
+int classificaRGB(int r, int g, int b) {
+  int valorMedio = media(r, g, b);
+
+  // Verifica Branco
+  if (dentroDaFaixa(r, BRANCO_R)&  & dentroDaFaixa(g, BRANCO_G)&  & dentroDaFaixa(b, BRANCO_B))
+return COR_BRANCO;
+
+// Verifica Preto
+if (dentroDaFaixa(r, PRETO_R)&  & dentroDaFaixa(g, PRETO_G)&  & dentroDaFaixa(b, PRETO_B))
+return COR_PRETO;
+
+// Verifica Vermelho (R predominante)
+if (dentroDaFaixa(r, VERMELHO_R)&  & dentroDaFaixa(g, VERMELHO_G)&  & dentroDaFaixa(b, VERMELHO_B)) {
+  if (r > g * 1.3 &  & r > b * 1.3) {
+    return COR_VERMELHO;
+  }
+}
+
+// Verifica Verde (G predominante)
+if (dentroDaFaixa(r, VERDE_R)&  & dentroDaFaixa(g, VERDE_G)&  & dentroDaFaixa(b, VERDE_B)) {
+  if (g > r * 1.3 &  & g > b * 1.3) {
+    return COR_VERDE;
+  }
+}
+
+// Verifica Verde Escuro
+if (dentroDaFaixa(r, VERDE_ESCURO_R)&  & dentroDaFaixa(g, VERDE_ESCURO_G)&  & dentroDaFaixa(b, VERDE_ESCURO_B)) {
+  if (g > r &  & g > b &  & valorMedio < 100) {
+    return COR_VERDE_ESCURO;
+  }
+}
+
+// Verifica Prata (todos os componentes médios e balanceados)
+if (dentroDaFaixa(r, PRATA_R)&  & dentroDaFaixa(g, PRATA_G)&  & dentroDaFaixa(b, PRATA_B)) {
+  // Calcula máximo e mínimo sem chamadas aninhadas
+  int max_val = r;
+  if (g > max_val)max_val = g;
+  if (b > max_val)max_val = b;
+
+int min_val = r;
+if (g < min_val)min_val = g;
+if (b < min_val)min_val = b;
+
+if ((max_val - min_val)< 30) {
+return COR_PRATA;
+}
+}
+
+return COR_DESCONHECIDA;
+}
+
+// Função para obter a intensidade de linha (0-100)
+int intensidadeLinha(int r, int g, int b) {
+  int mediaRGB =(r + g + b)/ 3;
+
+  // Valores de referência da calibração
+  int pretoRef = media(PRETO_R, PRETO_G, PRETO_B);
+  int brancoRef = media(BRANCO_R, BRANCO_G, BRANCO_B);
+
+  if (mediaRGB <= pretoRef)return 0;
+  if (mediaRGB >= brancoRef)return 100;
+
+return (mediaRGB - pretoRef)* 100 /(brancoRef - pretoRef);
+}
+
+// Função para limitar valores entre mínimo e máximo
+int limitar(int valor, int min_val, int max_val) {
+  if (valor < min_val)return min_val;
+  if (valor > max_val)return max_val;
+return valor;
+}
+
+// --- Programa Principal ---
+task main() {
+  // Configura os sensores
+  SetSensorColorFull(PORTA_COR_ESQUERDA);
+  SetSensorColorFull(PORTA_COR_DIREITA);
+  SetSensorLowspeed(PORTA_ULTRASSOM);
+
+  // Variáveis do PID
+  float erro = 0, erroAnterior = 0, integral = 0, derivativo = 0;
+  float correcao = 0;
+
+  while (true) {
+    // Lê os valores RGB dos sensores
+    int rEsq = ColorSensorValue(PORTA_COR_ESQUERDA, 0);
+    int gEsq = ColorSensorValue(PORTA_COR_ESQUERDA, 1);
+    int bEsq = ColorSensorValue(PORTA_COR_ESQUERDA, 2);
+
+    int rDir = ColorSensorValue(PORTA_COR_DIREITA, 0);
+    int gDir = ColorSensorValue(PORTA_COR_DIREITA, 1);
+    int bDir = ColorSensorValue(PORTA_COR_DIREITA, 2);
+
+    // Calcula a intensidade da linha para cada sensor
+    int intensidadeEsq = intensidadeLinha(rEsq, gEsq, bEsq);
+    int intensidadeDir = intensidadeLinha(rDir, gDir, bDir);
+
+    // Calcula o erro (diferença entre os sensores)
+    erro = intensidadeEsq - intensidadeDir;
+
+    // Calcula os componentes do PID
+    integral = integral + erro;
+    derivativo = erro - erroAnterior;
+
+    // Calcula a correção
+    correcao = KP * erro + KI * integral + KD * derivativo;
+
+    // Aplica a correção aos motores
+    int velocidadeEsq = VELOCIDADE_BASE - correcao;
+    int velocidadeDir = VELOCIDADE_BASE + correcao;
+
+    // Limita as velocidades
+    velocidadeEsq = limitar(velocidadeEsq, - 100, 100);
+    velocidadeDir = limitar(velocidadeDir, - 100, 100);
+
+    // Controla os motores - CORRIGIDO: usa OUT_A e OUT_B
+    OnFwd(MOTOR_ESQUERDO, velocidadeEsq);
+    OnFwd(MOTOR_DIREITO, velocidadeDir);
+
+    // Atualiza o erro anterior
+    erroAnterior = erro;
+
+    // Pequena pausa para estabilidade
+    Wait(10);
+  }
+}
