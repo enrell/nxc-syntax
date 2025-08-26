@@ -546,9 +546,6 @@ class SimpleNXCParser {
       this.addWarning('Missing semicolon', lineIndex, line.length - 1);
     }
     
-    if (line.length > 120) {
-      this.addWarning('Line too long (>120 characters)', lineIndex, 120);
-    }
     
     const leadingWhitespace = line.match(/^[\t ]+/);
     if (leadingWhitespace && leadingWhitespace[0].includes('\t') && leadingWhitespace[0].includes(' ')) {

@@ -312,16 +312,6 @@ NXC {
     const lines = sourceCode.split(/\r?\n/);
     
     lines.forEach((line, index) => {
-      // Warning for lines too long
-      if (line.length > 120) {
-        warnings.push({
-          message: 'Line too long (>120 characters)',
-          line: index,
-          column: 120,
-          severity: 'warning',
-          source: 'nxc-parser'
-        });
-      }
       
       // Warning for mixed tabs and spaces
       if (line.includes('\t') && line.includes('  ')) {

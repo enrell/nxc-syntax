@@ -403,17 +403,7 @@ class DiagnosticManager {
     this.checkInvalidSyntax(originalLine, cleanedLine, lineIndex, warnings);
     this.checkUnterminatedStrings(originalLine, lineIndex, warnings);
 
-    if (originalLine.length > 120) {
-      warnings.push({
-        message: 'Line too long (>120 characters)',
-        line: lineIndex,
-        column: 120,
-        severity: 'warning',
-        source: 'style-checker'
-      });
-    }
-
-    if (originalLine.includes('\t') && originalLine.includes('  ')) {
+  if (originalLine.includes('\t') && originalLine.includes('  ')) {
       warnings.push({
         message: 'Mixed tabs and spaces for indentation',
         line: lineIndex,
