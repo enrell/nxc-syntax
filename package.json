@@ -2,7 +2,7 @@
   "name": "nxc-syntax",
   "displayName": "NXC Syntax",
   "description": "A syntax highlighting and linter for the Not eXactly C (NXC) language (LEGO Mindstorms).",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "publisher": "enrell",
   "engines": {
     "vscode": "^1.90.0"

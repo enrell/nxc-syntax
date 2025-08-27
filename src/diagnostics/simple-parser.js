@@ -303,7 +303,10 @@ class SimpleNXCParser {
         const varUsages = [...trimmed.matchAll(/\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g)];
         varUsages.forEach(match => {
           const varName = match[1];
-          if (!this.isKeyword(varName) && !declaredMacros.has(varName) && !builtInFunctions.has(varName) && !this.isBuiltInConstant(varName)) {
+          // Treat declared functions (tasks/subs) as known symbols so they are not
+          // reported as undefined when used as identifiers (for example, passed
+          // as an argument to StartTask).
+          if (!this.isKeyword(varName) && !declaredMacros.has(varName) && !builtInFunctions.has(varName) && !this.isBuiltInConstant(varName) && !declaredFunctions.has(varName)) {
             let found = false;
             for (let s = scopes.length - 1; s >= 0; s--) {
               if (scopes[s].has(varName)) {

@@ -1,0 +1,201 @@
+// Sensor de Cor Esquerdo = Porta 2
+// Sensor de Cor Direito  = Porta 3
+// Sensor de Distância    = Porta 1
+#define PORTA_COR_ESQUERDA  S2
+#define PORTA_COR_DIREITA   S3
+#define PORTA_ULTRASSOM     S1
+
+#define VELOCIDADE_MINIMA		60
+#define VELOCIDADE_BASE			80
+#define VELOCIDADE_MAXIMA		100
+
+// Dando um número para cada cor.
+#define COR_DESCONHECIDA  0
+#define COR_BRANCO        1
+#define COR_PRETO         2
+#define COR_VERMELHO      3
+#define COR_VERDE         4
+#define COR_VERDE_ESCURO  5
+#define COR_PRATA         6
+
+// Valores de referência (ajustar conforme caliazulração) - usando arrays para simplicidade
+// a array aqui é azulasicamente uma lista que pode receazuler 3 valores
+// vamos tratar pela ordem, exemplo int azulranco[3] = {vermelho, verde, azul}
+int BRANCO[3] = {187, 187, 190};
+int PRETO[3] = {53, 39, 33};
+int VERMELHO[3] = {190, 50, 50};
+int VERDE[3] = {50, 180, 50};
+int VERDE_ESCURO[3] = {60, 75, 60};
+int PRATA[3] = {180, 180, 180};
+
+#define MARGEM_ERRO 20  // Margem de erro
+
+// Definições para motores
+#define MOTOR_ESQUERDO OUT_A
+#define MOTOR_DIREITO  OUT_C
+
+// Constantes PID (ajuste experimentalmente)
+// https://www.isa.org/getmedia/8bc75130-b662-4c50-8678-b5b59d0e1ae3/JUN23-Process-Control-fig4.gif?width=500&height=165&ext=.gif
+// K é de constante, ou seja Kp = constante proporcional, o mesmo para os outros
+#define KP 1.0  // Ganho proporcional corrige erro baseado em proporção se erro = 10, correção = 10
+#define KI 0.01 // Ganho integral suaviza a proporcional (o grosso) para oscilar menos
+#define KD 0.1  // Ganho derivativo suaviza o resultado do P.I para manter estável (é o ajuste fino)
+
+// Definições para desvio de obstáculos
+#define DISTANCIA_OBSTACULO 20  // cm para detectar obstáculo
+#define TEMPO_DESVIO 1000       // ms para virar (ajuste)
+
+// Variáveis globais para PID (não mexa)
+float erro_anterior = 0.0;
+float integral = 0.0;
+
+// Função para calcular a média de três números.
+int media(int valor1, int valor2, int valor3) {
+    return (valor1 + valor2 + valor3) / 3;
+}
+
+// Função para verificar se valor está dentro da faixa
+// se o valor for >= referencia - margem de erro e o valor for <= referencia + azul de erro
+// exemplo: valor = 70, referencia = 100, margem = 20 então:
+// se 70 >= 100 - 20 e 70 <= 100 + 20, retorna 1 (verdadeiro) se não, retorna 0 (false)
+// se 70 for menor ou igual a 80 e 70 for maior ou igual a 120, então o valor atual do sensor está no espectro
+// se as condições não forem atendidas, é por que o valor atual do sensor não está no espectro
+int dentroDaFaixa(int valor, int referencia) {
+    return (valor >= referencia - MARGEM_ERRO) && (valor <= referencia + MARGEM_ERRO);
+}
+
+// Função auxiliar para verificar se o vemelho, verde e azul corresponde a uma cor
+int correspondeCor(int vermelho, int verde, int azul, int cor[3]) {
+    return dentroDaFaixa(vermelho, cor[0]) && dentroDaFaixa(verde, cor[1]) && dentroDaFaixa(azul, cor[2]);
+}
+
+// Função para classificar a cor
+int classificadorRGB(int vermelho, int verde, int azul) {
+    // Se os valores do RGB do sensor corresponder ao branco, então é branco
+    if (correspondeCor(vermelho, verde, azul, BRANCO))
+		return COR_BRANCO;
+    
+    // Preto
+    if (correspondeCor(vermelho, verde, azul, PRETO))
+		return COR_PRETO;
+    
+    // Vermelho (R predominante, se o vermelho é 20% maior que os outros, é vermelho)
+    if (correspondeCor(vermelho, verde, azul, VERMELHO) && vermelho > verde * 1.2 && vermelho > azul * 1.2)
+		return COR_VERMELHO;
+    
+    // Verde (verde predominante)
+    if (correspondeCor(vermelho, verde, azul, VERDE) && verde > vermelho * 1.2 && verde > azul * 1.2)
+		return COR_VERDE;
+    
+    // Verde Escuro
+    int valorMedio = media(vermelho, verde, azul);
+    if (correspondeCor(vermelho, verde, azul, VERDE_ESCURO) && verde > vermelho && verde > azul && valorMedio < 100)
+		return COR_VERDE_ESCURO;
+    
+    // Prata (balanceado)
+		// ? significa então, : significa senão
+		// exemplo: se o vermelho for maior ">" que azul, então "?" recebe vermelho senão ":" recebe azul
+		// essa variável pega o menor valor ou o maior valor entre 3 valores (vermelho, verde e azul)
+    int valor_maximo = vermelho > verde ? (vermelho > azul ? vermelho : azul) : (verde > azul ? verde : azul);
+    int valor_minimo = vermelho < verde ? (vermelho < azul ? vermelho : azul) : (verde < azul ? verde : azul);
+		// Essa condição verifica se a diferença entre o valor máximo e mínimo dos componentes RGB é menor que 30. Isso indica que as cores estão balanceadas (próximas umas das outras), o que é típico para tons de prata ou cinza, onde vermelho, verde e azul têm valores semelhantes.
+		// Exemplo: Se RGB for {180, 180, 180}, max=180, min=180, diferença=0 (<30) → prata.
+		// Se for {200, 100, 150}, diferença=100 (>30) → não prata.
+		// O valor 30 é uma tolerância ajustável baseada na calibração do sensor. Se as leituras variarem muito, aumente para 40; se forem precisas, diminua para 20. Teste e ajuste conforme necessário
+    if (correspondeCor(vermelho, verde, azul, PRATA) && (valor_maximo - valor_minimo) < 30)
+		return COR_PRATA;
+    
+  // Se não estiver no espectro de cor vermelho, verde, verde escuro, branco ou prata:
+	return COR_DESCONHECIDA;
+}
+
+// Função para calcular erro baseado nas cores (preto = 1, branco = 0, outros = 0.5)
+float calcularErro(int cor_esquerda, int cor_direita) {
+    float leitura_esquerda = (cor_esquerda == COR_PRETO) ? 1.0 : (cor_esquerda == COR_BRANCO) ? 0.0 : 0.5;
+    float leitura_direita = (cor_direita == COR_PRETO) ? 1.0 : (cor_direita == COR_BRANCO) ? 0.0 : 0.5;
+    return leitura_esquerda - leitura_direita;  // Erro positivo: virar esquerda; negativo: direita
+}
+
+// Função PID
+float calcularPID(float erro) {
+    integral += erro;
+    float derivativo = erro - erro_anterior;
+    erro_anterior = erro;
+    return (KP * erro) + (KI * integral) + (KD * derivativo);
+}
+
+// Função para controlar motores com correção PID
+void controlarMotores(float correcao) {
+    int velocidade_esquerda = VELOCIDADE_BASE - correcao;
+    int velocidade_direita = VELOCIDADE_BASE + correcao;
+    
+    // Limitar velocidades para evitar valores inválidos
+    velocidade_esquerda = (velocidade_esquerda < VELOCIDADE_MINIMA) ? VELOCIDADE_MINIMA : velocidade_esquerda;
+    velocidade_direita = (velocidade_direita < VELOCIDADE_MINIMA) ? VELOCIDADE_MINIMA : velocidade_direita;
+    velocidade_esquerda = (velocidade_esquerda > VELOCIDADE_MAXIMA) ? VELOCIDADE_MAXIMA : velocidade_esquerda;
+    velocidade_direita = (velocidade_direita > VELOCIDADE_MAXIMA) ? VELOCIDADE_MAXIMA : velocidade_direita;
+    
+    OnFwd(MOTOR_ESQUERDO, velocidade_esquerda);
+    OnFwd(MOTOR_DIREITO, velocidade_direita);
+}
+
+// Task assíncrono para seguir linha com PID
+task seguirLinha() {
+    while (true) {
+        // Leituras dos sensores de cor
+        int vermelho_esquerda = ColorSensorValue(PORTA_COR_ESQUERDA, 0);
+        int verde_esquerda = ColorSensorValue(PORTA_COR_ESQUERDA, 1);
+        int azul_esquerda = ColorSensorValue(PORTA_COR_ESQUERDA, 2);
+        
+        int vermelho_direita = ColorSensorValue(PORTA_COR_DIREITA, 0);
+        int verde_direita = ColorSensorValue(PORTA_COR_DIREITA, 1);
+        int azul_direita = ColorSensorValue(PORTA_COR_DIREITA, 2);
+        
+        // Classificar cores
+        int cor_esquerda = classificadorRGB(vermelho_esquerda, verde_esquerda, azul_esquerda);
+        int cor_direita = classificadorRGB(vermelho_direita, verde_direita, azul_direita);
+        
+        // Calcular erro e aplicar PID
+        float erro = calcularErro(cor_esquerda, cor_direita);
+        float correcao = calcularPID(erro);
+        controlarMotores(correcao);
+        
+        Wait(100);  // Pausa para estabilidade
+    }
+}
+
+// Task assíncrono para desvio de obstáculos com ultrassônico
+task desviarObstaculo() {
+    while (true) {
+        int distancia = SensorUS(PORTA_ULTRASSOM);
+        if (distancia < DISTANCIA_OBSTACULO && distancia > 0) {  // Evitar leituras inválidas
+            // Parar motores
+            Off(MOTOR_ESQUERDO);
+            Off(MOTOR_DIREITO);
+            
+            // Desviar: virar esquerda (ajuste direção se necessário)
+            OnRev(MOTOR_ESQUERDO, VELOCIDADE_BASE);
+            OnFwd(MOTOR_DIREITO, VELOCIDADE_BASE);
+            Wait(TEMPO_DESVIO);
+            
+            // Parar após desvio
+            Off(MOTOR_ESQUERDO);
+            Off(MOTOR_DIREITO);
+            
+            // Aguardar antes de retomar
+            Wait(500);
+        }
+        Wait(200);  // Verificar frequentemente
+    }
+}
+
+task main() {
+    // Iniciar tarefas assíncronas
+    StartTask(seguirLinha);
+    StartTask(desviarObstaculo);
+    
+    // Manter o programa principal em execução
+    while (true) {
+        Wait(1000);
+    }
+}
