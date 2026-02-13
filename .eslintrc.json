@@ -42,6 +42,7 @@
     "out/",
     "dist/",
     "*.vsix",
-    "utils/"
+    "utils/",
+    "build.js"
   ]
 }
