@@ -17,180 +17,151 @@ class NXCExtension {
     this.watchers = [];
   }
 
-  activate(context) {
-    console.log('Activating NXC extension...');
-    
-    try {
-      // Initialize diagnostic manager
-      this.diagnosticManager = new DiagnosticManager();
-      context.subscriptions.push(this.diagnosticManager);
+    activate(context) {
+        console.log('Activating NXC extension...');
 
-      // Build symbol index
-      this.buildIndex(context);
+        try {
+            this.diagnosticManager = new DiagnosticManager();
+            context.subscriptions.push(this.diagnosticManager);
+            this.buildIndex(context);
+            this.registerLanguageProviders(context);
+            this.setupFileWatchers(context);
+            this.registerCommands(context);
+            this.setupDocumentEvents(context);
 
-      // Register language providers
-      this.registerLanguageProviders(context);
+            console.log('NXC extension activated successfully');
 
-      // Setup watchers for data files
-      this.setupFileWatchers(context);
+            setTimeout(() => {
+                vscode.workspace.textDocuments.forEach(document => {
+                    if (document.languageId === 'nxc') {
+                        console.log(`Analyzing initial document: ${document.fileName}`);
+                        this.diagnosticManager.analyzeDocument(document);
+                    }
+                });
+            }, 1000);
 
-      // Register commands
-      this.registerCommands(context);
+        } catch (error) {
+            console.error('Error activating NXC extension:', error);
+            vscode.window.showErrorMessage(`Error activating NXC extension: ${error.message}`);
+        }
+    }
 
-      // Setup document events
-      this.setupDocumentEvents(context);
-
-      console.log('NXC extension activated successfully');
-      
-      // Force initial analysis of already open documents
-      setTimeout(() => {
-        vscode.workspace.textDocuments.forEach(document => {
-          if (document.languageId === 'nxc') {
-            console.log(`Analyzing initial document: ${document.fileName}`);
-            this.diagnosticManager.analyzeDocument(document);
-          }
+    registerLanguageProviders(context) {
+        const completionProvider = vscode.languages.registerCompletionItemProvider('nxc', {
+            provideCompletionItems: (document, position) => {
+                return this.provideCompletionItems(document, position);
+            }
         });
-      }, 1000);
-      
-    } catch (error) {
-      console.error('Error activating NXC extension:', error);
-      vscode.window.showErrorMessage(`Error activating NXC extension: ${error.message}`);
-    }
-  }
 
-  registerLanguageProviders(context) {
-    // Completion provider
-    const completionProvider = vscode.languages.registerCompletionItemProvider('nxc', {
-      provideCompletionItems: (document, position) => {
-        return this.provideCompletionItems(document, position);
-      }
-    });
+        const hoverProvider = vscode.languages.registerHoverProvider('nxc', {
+            provideHover: (document, position) => {
+                return this.provideHover(document, position);
+            }
+        });
 
-    // Hover provider
-    const hoverProvider = vscode.languages.registerHoverProvider('nxc', {
-      provideHover: (document, position) => {
-        return this.provideHover(document, position);
-      }
-    });
+        const signatureProvider = vscode.languages.registerSignatureHelpProvider('nxc', {
+            provideSignatureHelp: (document, position) => {
+                return this.provideSignatureHelp(document, position);
+            }
+        }, '(', ',');
 
-    // Signature help provider
-    const signatureProvider = vscode.languages.registerSignatureHelpProvider('nxc', {
-      provideSignatureHelp: (document, position) => {
-        return this.provideSignatureHelp(document, position);
-      }
-    }, '(', ',');
+        const formattingProvider = vscode.languages.registerDocumentFormattingEditProvider('nxc', {
+            provideDocumentFormattingEdits: (document, options) => {
+                return this.provideDocumentFormattingEdits(document, options);
+            }
+        });
 
-    // Document formatting provider
-    const formattingProvider = vscode.languages.registerDocumentFormattingEditProvider('nxc', {
-      provideDocumentFormattingEdits: (document, options) => {
-        return this.provideDocumentFormattingEdits(document, options);
-      }
-    });
+        const rangeFormattingProvider = vscode.languages.registerDocumentRangeFormattingEditProvider('nxc', {
+            provideDocumentRangeFormattingEdits: (document, range, options) => {
+                return this.provideDocumentRangeFormattingEdits(document, range, options);
+            }
+        });
 
-    // Document range formatting provider
-    const rangeFormattingProvider = vscode.languages.registerDocumentRangeFormattingEditProvider('nxc', {
-      provideDocumentRangeFormattingEdits: (document, range, options) => {
-        return this.provideDocumentRangeFormattingEdits(document, range, options);
-      }
-    });
-
-    context.subscriptions.push(completionProvider, hoverProvider, signatureProvider, formattingProvider, rangeFormattingProvider);
-  }
-
-  setupDocumentEvents(context) {
-    // Analyze documents when opened
-    const onDidOpenTextDocument = vscode.workspace.onDidOpenTextDocument(document => {
-      if (document.languageId === 'nxc') {
-        this.diagnosticManager.analyzeDocument(document);
-      }
-    });
-
-    // Analyze documents when modified
-    const onDidChangeTextDocument = vscode.workspace.onDidChangeTextDocument(event => {
-      if (event.document.languageId === 'nxc') {
-        // Debounce to avoid excessive analyses
-        this.debounceAnalysis(event.document);
-      }
-    });
-
-    // Clear diagnostics when documents are closed
-    const onDidCloseTextDocument = vscode.workspace.onDidCloseTextDocument(document => {
-      if (document.languageId === 'nxc') {
-        this.diagnosticManager.clearDiagnostics(document.uri);
-      }
-    });
-
-    // Format on save if enabled
-    const onWillSaveTextDocument = vscode.workspace.onWillSaveTextDocument(event => {
-      if (event.document.languageId === 'nxc') {
-        const config = vscode.workspace.getConfiguration('nxc.formatting');
-        if (config.get('formatOnSave', false)) {
-          const edits = this.provideDocumentFormattingEdits(event.document, {
-            tabSize: vscode.workspace.getConfiguration('editor').get('tabSize', 4),
-            insertSpaces: vscode.workspace.getConfiguration('editor').get('insertSpaces', true)
-          });
-          if (edits && edits.length > 0) {
-            event.waitUntil(Promise.resolve(edits));
-          }
-        }
-      }
-    });
-
-    context.subscriptions.push(onDidOpenTextDocument, onDidChangeTextDocument, onDidCloseTextDocument, onWillSaveTextDocument);
-
-    // Analyze already open documents
-    vscode.workspace.textDocuments.forEach(document => {
-      if (document.languageId === 'nxc') {
-        this.diagnosticManager.analyzeDocument(document);
-      }
-    });
-  }
-
-  debounceAnalysis(document) {
-    // Cancel previous analysis if it exists
-    if (this.analysisTimeout) {
-      clearTimeout(this.analysisTimeout);
+        context.subscriptions.push(completionProvider, hoverProvider, signatureProvider, formattingProvider, rangeFormattingProvider);
     }
 
-    // Schedule new analysis
-    this.analysisTimeout = setTimeout(() => {
-      this.diagnosticManager.analyzeDocument(document);
-    }, 500); // 500ms debounce
-  }
+    setupDocumentEvents(context) {
+        const onDidOpenTextDocument = vscode.workspace.onDidOpenTextDocument(document => {
+            if (document.languageId === 'nxc') {
+                this.diagnosticManager.analyzeDocument(document);
+            }
+        });
 
-  registerCommands(context) {
-    // Command to rebuild index
-    const rebuildIndexCommand = vscode.commands.registerCommand('nxc.rebuildIndex', () => {
-      this.buildIndex(context);
-      vscode.window.showInformationMessage('NXC index rebuilt successfully');
-    });
+        const onDidChangeTextDocument = vscode.workspace.onDidChangeTextDocument(event => {
+            if (event.document.languageId === 'nxc') {
+                this.debounceAnalysis(event.document);
+            }
+        });
 
-    // Command to reanalyze open files
-    const reparseCommand = vscode.commands.registerCommand('nxc.reparseOpenFiles', () => {
-      vscode.workspace.textDocuments.forEach(document => {
-        if (document.languageId === 'nxc') {
-          this.diagnosticManager.analyzeDocument(document);
+        const onDidCloseTextDocument = vscode.workspace.onDidCloseTextDocument(document => {
+            if (document.languageId === 'nxc') {
+                this.diagnosticManager.clearDiagnostics(document.uri);
+            }
+        });
+
+        const onWillSaveTextDocument = vscode.workspace.onWillSaveTextDocument(event => {
+            if (event.document.languageId === 'nxc') {
+                const config = vscode.workspace.getConfiguration('nxc.formatting');
+                if (config.get('formatOnSave', false)) {
+                    const edits = this.provideDocumentFormattingEdits(event.document, {
+                        tabSize: vscode.workspace.getConfiguration('editor').get('tabSize', 4),
+                        insertSpaces: vscode.workspace.getConfiguration('editor').get('insertSpaces', true)
+                    });
+                    if (edits && edits.length > 0) {
+                        event.waitUntil(Promise.resolve(edits));
+                    }
+                }
+            }
+        });
+
+        context.subscriptions.push(onDidOpenTextDocument, onDidChangeTextDocument, onDidCloseTextDocument, onWillSaveTextDocument);
+
+        vscode.workspace.textDocuments.forEach(document => {
+            if (document.languageId === 'nxc') {
+                this.diagnosticManager.analyzeDocument(document);
+            }
+        });
+    }
+
+    debounceAnalysis(document) {
+        if (this.analysisTimeout) {
+            clearTimeout(this.analysisTimeout);
         }
-      });
-      vscode.window.showInformationMessage('NXC files reanalyzed');
-    });
 
-    // Command to clear all diagnostics
-    const clearDiagnosticsCommand = vscode.commands.registerCommand('nxc.clearDiagnostics', () => {
-      this.diagnosticManager.clearAllDiagnostics();
-      vscode.window.showInformationMessage('Diagnostics cleared');
-    });
+        this.analysisTimeout = setTimeout(() => {
+            this.diagnosticManager.analyzeDocument(document);
+        }, 500);
+    }
 
-    // Command to format document
-    const formatDocumentCommand = vscode.commands.registerCommand('nxc.formatDocument', () => {
-      const editor = vscode.window.activeTextEditor;
-      if (editor && editor.document.languageId === 'nxc') {
-        vscode.commands.executeCommand('editor.action.formatDocument');
-      }
-    });
+    registerCommands(context) {
+        const rebuildIndexCommand = vscode.commands.registerCommand('nxc.rebuildIndex', () => {
+            this.buildIndex(context);
+            vscode.window.showInformationMessage('NXC index rebuilt successfully');
+        });
 
-    context.subscriptions.push(rebuildIndexCommand, reparseCommand, clearDiagnosticsCommand, formatDocumentCommand);
-  }
+        const reparseCommand = vscode.commands.registerCommand('nxc.reparseOpenFiles', () => {
+            vscode.workspace.textDocuments.forEach(document => {
+                if (document.languageId === 'nxc') {
+                    this.diagnosticManager.analyzeDocument(document);
+                }
+            });
+            vscode.window.showInformationMessage('NXC files reanalyzed');
+        });
+
+        const clearDiagnosticsCommand = vscode.commands.registerCommand('nxc.clearDiagnostics', () => {
+            this.diagnosticManager.clearAllDiagnostics();
+            vscode.window.showInformationMessage('Diagnostics cleared');
+        });
+
+        const formatDocumentCommand = vscode.commands.registerCommand('nxc.formatDocument', () => {
+            const editor = vscode.window.activeTextEditor;
+            if (editor && editor.document.languageId === 'nxc') {
+                vscode.commands.executeCommand('editor.action.formatDocument');
+            }
+        });
+
+        context.subscriptions.push(rebuildIndexCommand, reparseCommand, clearDiagnosticsCommand, formatDocumentCommand);
+    }
 
   setupFileWatchers(context) {
     const filesToWatch = [
@@ -242,104 +213,104 @@ class NXCExtension {
     }
   }
 
-  parseKeywords(filePath) {
-    if (!fs.existsSync(filePath)) return;
-    
-    try {
-      const content = fs.readFileSync(filePath, 'utf8');
-      content.split(/\r?\n/).forEach(line => {
-        const trimmed = line.trim();
-        if (trimmed && !trimmed.startsWith('//') && !trimmed.startsWith('#')) {
-          this.cache.keywords.add(trimmed);
-        }
-      });
-    } catch (error) {
-      console.warn(`Erro ao ler ${filePath}:`, error);
-    }
-  }
+    parseKeywords(filePath) {
+        if (!fs.existsSync(filePath)) return;
 
-  parseConstants(filePath) {
-    if (!fs.existsSync(filePath)) return;
-    
-    try {
-      const content = fs.readFileSync(filePath, 'utf8');
-      content.split(/\r?\n/).forEach(line => {
-        const trimmed = line.trim();
-        if (trimmed && !trimmed.startsWith('//') && !trimmed.startsWith('#')) {
-          this.cache.constants.add(trimmed);
-        }
-      });
-    } catch (error) {
-      console.warn(`Erro ao ler ${filePath}:`, error);
-    }
-  }
-
-  parseApi(filePath) {
-    if (!fs.existsSync(filePath)) return;
-    
-    try {
-      const content = fs.readFileSync(filePath, 'utf8');
-      content.split(/\r?\n/).forEach(line => {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('//')) return;
-        
-        const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)$/);
-        if (!match) return;
-        
-        const name = match[1];
-        const params = match[2].trim();
-        
-        if (this.cache.keywords.has(name) || this.cache.types.has(name)) return;
-        
-        const paramList = params.length ? params.split(',').map(p => p.trim()) : [];
-        const paramNames = paramList.map(param => {
-          const cleaned = param.replace(/=.*$/, '').replace(/\[.*\]/, '').trim();
-          const parts = cleaned.split(/\s+/);
-          return parts[parts.length - 1] || param;
-        });
-        
-        this.cache.functions.set(name, {
-          name, 
-          signature: `(${params})`, 
-          params: paramNames, 
-          rawParams: paramList,
-          fullSignature: trimmed,
-          documentation: this.generateDocumentation(name, paramList)
-        });
-      });
-    } catch (error) {
-      console.warn(`Erro ao ler ${filePath}:`, error);
-    }
-  }
-
-  parseTemplates(filePath) {
-    if (!fs.existsSync(filePath)) return;
-    
-    try {
-      const content = fs.readFileSync(filePath, 'utf8');
-      content.split(/\r?\n/).forEach(line => {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('-') || trimmed.startsWith('|') || trimmed.startsWith('#')) return;
-        
-        const functionMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*(?:\(|"|;)/);
-        if (functionMatch) {
-          const name = functionMatch[1];
-          if (!this.cache.keywords.has(name) && !this.cache.types.has(name) && !this.cache.functions.has(name)) {
-            this.cache.functions.set(name, {
-              name, 
-              signature: '()', 
-              params: [], 
-              rawParams: [],
-              fullSignature: `${name}()`,
-              documentation: `Template function: ${name}`
+        try {
+            const content = fs.readFileSync(filePath, 'utf8');
+            content.split(/\r?\n/).forEach(line => {
+                const trimmed = line.trim();
+                if (trimmed && !trimmed.startsWith('//') && !trimmed.startsWith('#')) {
+                    this.cache.keywords.add(trimmed);
+                }
             });
-          }
+        } catch (error) {
+            console.warn(`Error reading ${filePath}:`, error);
         }
-      });
-    } catch (error) {
-      console.warn(`Erro ao ler ${filePath}:`, error);
     }
-  }
+
+    parseConstants(filePath) {
+        if (!fs.existsSync(filePath)) return;
+
+        try {
+            const content = fs.readFileSync(filePath, 'utf8');
+            content.split(/\r?\n/).forEach(line => {
+                const trimmed = line.trim();
+                if (trimmed && !trimmed.startsWith('//') && !trimmed.startsWith('#')) {
+                    this.cache.constants.add(trimmed);
+                }
+            });
+        } catch (error) {
+            console.warn(`Error reading ${filePath}:`, error);
+        }
+    }
+
+    parseApi(filePath) {
+        if (!fs.existsSync(filePath)) return;
+
+        try {
+            const content = fs.readFileSync(filePath, 'utf8');
+            content.split(/\r?\n/).forEach(line => {
+                const trimmed = line.trim();
+                if (!trimmed || trimmed.startsWith('//')) return;
+
+                const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)$/);
+                if (!match) return;
+
+                const name = match[1];
+                const params = match[2].trim();
+
+                if (this.cache.keywords.has(name) || this.cache.types.has(name)) return;
+
+                const paramList = params.length ? params.split(',').map(p => p.trim()) : [];
+                const paramNames = paramList.map(param => {
+                    const cleaned = param.replace(/=.*$/, '').replace(/\[.*\]/, '').trim();
+                    const parts = cleaned.split(/\s+/);
+                    return parts[parts.length - 1] || param;
+                });
+
+                this.cache.functions.set(name, {
+                    name,
+                    signature: `(${params})`,
+                    params: paramNames,
+                    rawParams: paramList,
+                    fullSignature: trimmed,
+                    documentation: this.generateDocumentation(name, paramList)
+                });
+            });
+        } catch (error) {
+            console.warn(`Error reading ${filePath}:`, error);
+        }
+    }
+
+    parseTemplates(filePath) {
+        if (!fs.existsSync(filePath)) return;
+
+        try {
+            const content = fs.readFileSync(filePath, 'utf8');
+            content.split(/\r?\n/).forEach(line => {
+                const trimmed = line.trim();
+                if (!trimmed || trimmed.startsWith('-') || trimmed.startsWith('|') || trimmed.startsWith('#')) return;
+
+                const functionMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*(?:\(|"|;)/);
+                if (functionMatch) {
+                    const name = functionMatch[1];
+                    if (!this.cache.keywords.has(name) && !this.cache.types.has(name) && !this.cache.functions.has(name)) {
+                        this.cache.functions.set(name, {
+                            name,
+                            signature: '()',
+                            params: [],
+                            rawParams: [],
+                            fullSignature: `${name}()`,
+                            documentation: `Template function: ${name}`
+                        });
+                    }
+                }
+            });
+        } catch (error) {
+            console.warn(`Error reading ${filePath}:`, error);
+        }
+    }
 
   generateDocumentation(functionName, params) {
     const paramDocs = params.length > 0 ? 
@@ -348,138 +319,128 @@ class NXCExtension {
     return `NXC Function: \`${functionName}\`${paramDocs}`;
   }
 
-  provideCompletionItems(document, position) {
-    const range = document.getWordRangeAtPosition(position) || new vscode.Range(position, position);
-    const items = [];
-    
-    // Add keywords
-    for (const keyword of this.cache.keywords) {
-      const item = new vscode.CompletionItem(keyword, vscode.CompletionItemKind.Keyword);
-      item.range = range;
-      item.sortText = `1_${keyword}`; // High priority
-      items.push(item);
+    provideCompletionItems(document, position) {
+        const range = document.getWordRangeAtPosition(position) || new vscode.Range(position, position);
+        const items = [];
+
+        for (const keyword of this.cache.keywords) {
+            const item = new vscode.CompletionItem(keyword, vscode.CompletionItemKind.Keyword);
+            item.range = range;
+            item.sortText = `1_${keyword}`;
+            items.push(item);
+        }
+
+        for (const type of this.cache.types) {
+            const item = new vscode.CompletionItem(type, vscode.CompletionItemKind.Struct);
+            item.range = range;
+            item.sortText = `2_${type}`;
+            items.push(item);
+        }
+
+        for (const func of this.cache.functions.values()) {
+            const item = new vscode.CompletionItem(func.name, vscode.CompletionItemKind.Function);
+            item.detail = func.fullSignature;
+            item.documentation = new vscode.MarkdownString(func.documentation);
+
+            if (func.params.length > 0) {
+                const placeholders = func.params.map((param, index) => {
+                    const suggestion = this.suggestParameterValue(param, func.rawParams[index]);
+                    return `\${${index + 1}:${suggestion}}`;
+                });
+                item.insertText = new vscode.SnippetString(`${func.name}(${placeholders.join(', ')})`);
+            } else {
+                item.insertText = new vscode.SnippetString(`${func.name}()`);
+            }
+
+            item.range = range;
+            item.sortText = `3_${func.name}`;
+            items.push(item);
+        }
+
+        for (const constant of this.cache.constants) {
+            if (this.cache.keywords.has(constant) || this.cache.types.has(constant) || this.cache.functions.has(constant)) {
+                continue;
+            }
+
+            const item = new vscode.CompletionItem(constant, vscode.CompletionItemKind.Constant);
+            item.range = range;
+            item.sortText = `4_${constant}`;
+            items.push(item);
+        }
+
+        return items;
     }
-    
-    // Add types
-    for (const type of this.cache.types) {
-      const item = new vscode.CompletionItem(type, vscode.CompletionItemKind.Struct);
-      item.range = range;
-      item.sortText = `2_${type}`;
-      items.push(item);
+
+    provideHover(document, position) {
+        const range = document.getWordRangeAtPosition(position, /[A-Za-z_][A-Za-z0-9_]*/);
+        if (!range) return;
+
+        const word = document.getText(range);
+
+        const func = this.cache.functions.get(word);
+        if (func) {
+            const markdown = new vscode.MarkdownString();
+            markdown.appendCodeblock(func.fullSignature, 'nxc');
+            if (func.documentation) {
+                markdown.appendMarkdown('\n\n' + func.documentation);
+            }
+            return new vscode.Hover(markdown, range);
+        }
+
+        if (this.cache.constants.has(word)) {
+            const markdown = new vscode.MarkdownString();
+            markdown.appendCodeblock(`${word} (constant)`, 'nxc');
+            return new vscode.Hover(markdown, range);
+        }
+
+        if (this.cache.keywords.has(word)) {
+            const markdown = new vscode.MarkdownString();
+            markdown.appendCodeblock(`${word} (keyword)`, 'nxc');
+            return new vscode.Hover(markdown, range);
+        }
+
+        return undefined;
     }
-    
-    // Add functions
-    for (const func of this.cache.functions.values()) {
-      const item = new vscode.CompletionItem(func.name, vscode.CompletionItemKind.Function);
-      item.detail = func.fullSignature;
-      item.documentation = new vscode.MarkdownString(func.documentation);
-      
-      if (func.params.length > 0) {
-        const placeholders = func.params.map((param, index) => {
-          const suggestion = this.suggestParameterValue(param, func.rawParams[index]);
-          return `\${${index + 1}:${suggestion}}`;
+
+    provideSignatureHelp(document, position) {
+        const line = document.lineAt(position.line).text.substring(0, position.character);
+        const callMatch = /([A-Za-z_][A-Za-z0-9_]*)\s*\(([^()]*)$/.exec(line);
+
+        if (!callMatch) return null;
+
+        const functionName = callMatch[1];
+        const func = this.cache.functions.get(functionName);
+
+        if (!func) return null;
+
+        const signature = new vscode.SignatureInformation(func.fullSignature);
+        signature.documentation = new vscode.MarkdownString(func.documentation);
+
+        func.rawParams.forEach(param => {
+            signature.parameters.push(new vscode.ParameterInformation(param.trim()));
         });
-        item.insertText = new vscode.SnippetString(`${func.name}(${placeholders.join(', ')})`);
-      } else {
-        item.insertText = new vscode.SnippetString(`${func.name}()`);
-      }
-      
-      item.range = range;
-      item.sortText = `3_${func.name}`;
-      items.push(item);
-    }
-    
-    // Add constants
-    for (const constant of this.cache.constants) {
-      if (this.cache.keywords.has(constant) || this.cache.types.has(constant) || this.cache.functions.has(constant)) {
-        continue;
-      }
-      
-      const item = new vscode.CompletionItem(constant, vscode.CompletionItemKind.Constant);
-      item.range = range;
-      item.sortText = `4_${constant}`;
-      items.push(item);
-    }
-    
-    return items;
-  }
 
-  provideHover(document, position) {
-    const range = document.getWordRangeAtPosition(position, /[A-Za-z_][A-Za-z0-9_]*/);
-    if (!range) return;
-    
-    const word = document.getText(range);
-    
-    // Check if it's a function
-    const func = this.cache.functions.get(word);
-    if (func) {
-      const markdown = new vscode.MarkdownString();
-      markdown.appendCodeblock(func.fullSignature, 'nxc');
-      if (func.documentation) {
-        markdown.appendMarkdown('\n\n' + func.documentation);
-      }
-      return new vscode.Hover(markdown, range);
-    }
-    
-    // Check if it's a constant
-    if (this.cache.constants.has(word)) {
-      const markdown = new vscode.MarkdownString();
-      markdown.appendCodeblock(`${word} (constant)`, 'nxc');
-      return new vscode.Hover(markdown, range);
-    }
-    
-    // Check if it's a keyword
-    if (this.cache.keywords.has(word)) {
-      const markdown = new vscode.MarkdownString();
-      markdown.appendCodeblock(`${word} (keyword)`, 'nxc');
-      return new vscode.Hover(markdown, range);
-    }
-    
-    return undefined;
-  }
+        const help = new vscode.SignatureHelp();
+        help.signatures = [signature];
+        help.activeSignature = 0;
 
-  provideSignatureHelp(document, position) {
-    const line = document.lineAt(position.line).text.substring(0, position.character);
-    const callMatch = /([A-Za-z_][A-Za-z0-9_]*)\s*\(([^()]*)$/.exec(line);
-    
-    if (!callMatch) return null;
-    
-    const functionName = callMatch[1];
-    const func = this.cache.functions.get(functionName);
-    
-    if (!func) return null;
-    
-    const signature = new vscode.SignatureInformation(func.fullSignature);
-    signature.documentation = new vscode.MarkdownString(func.documentation);
-    
-    // Add parameter information
-    func.rawParams.forEach(param => {
-      signature.parameters.push(new vscode.ParameterInformation(param.trim()));
-    });
-    
-    const help = new vscode.SignatureHelp();
-    help.signatures = [signature];
-    help.activeSignature = 0;
-    
-    // Calculate active parameter
-    const argsSoFar = callMatch[2];
-    const commaCount = (argsSoFar.match(/,/g) || []).length;
-    help.activeParameter = argsSoFar.trim() === '' ? 0 : commaCount;
-    
-    return help;
-  }
+        const argsSoFar = callMatch[2];
+        const commaCount = (argsSoFar.match(/,/g) || []).length;
+        help.activeParameter = argsSoFar.trim() === '' ? 0 : commaCount;
 
-  suggestParameterValue(paramName, paramType = '') {
-    const name = paramName.toLowerCase();
-    const type = paramType.toLowerCase();
-    
-    // Type-based suggestions
-    if (type.includes('byte') && name.includes('output')) return 'OUT_A';
-    if (type.includes('byte') && name.includes('port')) return 'IN_1';
-    if (name.includes('string') || type.includes('string')) return '""';
-    if (type.includes('bool')) return 'true';
-    
-    // Name-based suggestions
+        return help;
+    }
+
+    suggestParameterValue(paramName, paramType = '') {
+        const name = paramName.toLowerCase();
+        const type = paramType.toLowerCase();
+
+        if (type.includes('byte') && name.includes('output')) return 'OUT_A';
+        if (type.includes('byte') && name.includes('port')) return 'IN_1';
+        if (name.includes('string') || type.includes('string')) return '""';
+        if (type.includes('bool')) return 'true';
+
+
     const suggestions = {
       'outputs?': 'OUT_A',
       'ports?': 'IN_1',
@@ -531,25 +492,23 @@ class NXCExtension {
     }
   }
 
-  deactivate() {
-    console.log('Deactivating NXC extension...');
-    
-    // Close watchers
-    this.watchers.forEach(watcher => {
-      try {
-        watcher.close();
-      } catch (error) {
-        console.warn('Error closing watcher:', error);
-      }
-    });
-    
-    // Clear analysis timeout
-    if (this.analysisTimeout) {
-      clearTimeout(this.analysisTimeout);
+    deactivate() {
+        console.log('Deactivating NXC extension...');
+
+        this.watchers.forEach(watcher => {
+            try {
+                watcher.close();
+            } catch (error) {
+                console.warn('Error closing watcher:', error);
+            }
+        });
+
+        if (this.analysisTimeout) {
+            clearTimeout(this.analysisTimeout);
+        }
+
+        console.log('NXC extension deactivated');
     }
-    
-    console.log('NXC extension deactivated');
-  }
 }
 
 // Global extension instance
