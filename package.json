@@ -5,7 +5,8 @@
   "version": "1.8.0",
   "publisher": "enrell",
   "engines": {
-    "vscode": "^1.90.0"
+    "vscode": "^1.90.0",
+    "node": ">=18.0.0"
   },
   "icon": "assets/logo.jpg",
   "categories": [
@@ -28,9 +29,6 @@
     "lint:fix": "eslint src/**/*.js --fix",
     "format": "prettier --write src/**/*.js",
     "format:check": "prettier --check src/**/*.js"
-  },
-  "engines": {
-    "node": ">=18.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
