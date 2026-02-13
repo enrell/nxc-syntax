@@ -66,7 +66,11 @@ class SimpleNXCParser {
     if (this.braceCount > 0) {
       const lastBrace = this.braceStack[this.braceStack.length - 1];
       if (lastBrace) {
-        this.addError('Opening brace without matching closing brace', lastBrace.line, lastBrace.column);
+        this.addError(
+          'Opening brace without matching closing brace',
+          lastBrace.line,
+          lastBrace.column
+        );
       } else {
         this.addError('Unbalanced braces - missing closing braces', lines.length - 1, 0);
       }
@@ -126,12 +130,37 @@ class SimpleNXCParser {
 
       this.analyzeLineForVariables(trimmed, originalLine, lineIndex, scopes, funcDeclaration);
       this.handleForLoopVariables(trimmed, originalLine, lineIndex, scopes, funcDeclaration);
-      this.manageScopesAndDeclarations(cleanedLine, trimmed, originalLine, lineIndex, scopes, funcDeclaration, calledFunctions, builtInFunctions, declaredMacros);
-      this.analyzeVariableUsages(trimmed, originalLine, lineIndex, scopes, builtInFunctions, declaredFunctions, declaredMacros, inMultilineMacro, funcDeclaration);
+      this.manageScopesAndDeclarations(
+        cleanedLine,
+        trimmed,
+        originalLine,
+        lineIndex,
+        scopes,
+        funcDeclaration,
+        calledFunctions,
+        builtInFunctions,
+        declaredMacros
+      );
+      this.analyzeVariableUsages(
+        trimmed,
+        originalLine,
+        lineIndex,
+        scopes,
+        builtInFunctions,
+        declaredFunctions,
+        declaredMacros,
+        inMultilineMacro,
+        funcDeclaration
+      );
     });
 
     this.checkBracedInitializerAccesses(cleanedCode, sourceCode);
-    this.suggestAlternativeFunctions(calledFunctions, declaredFunctions, declaredMacros, builtInFunctions);
+    this.suggestAlternativeFunctions(
+      calledFunctions,
+      declaredFunctions,
+      declaredMacros,
+      builtInFunctions
+    );
   }
 
   isMultilineMacroEnd(inMultilineMacro, trimmed, lines, lineIndex) {
@@ -166,7 +195,13 @@ class SimpleNXCParser {
       if (funcDeclaration) {
         const funcName = funcDeclaration[1];
         const isConditional = conditionalDepth > 0;
-        this.handleFunctionDeclaration(funcName, lineIndex, lines[lineIndex], declaredFunctions, isConditional);
+        this.handleFunctionDeclaration(
+          funcName,
+          lineIndex,
+          lines[lineIndex],
+          declaredFunctions,
+          isConditional
+        );
       }
     });
   }
@@ -178,10 +213,20 @@ class SimpleNXCParser {
       const existing = declaredFunctions.get(funcName);
       if (!existing.conditional && !isConditional) {
         const column = originalLine.indexOf(funcName);
-        this.addError(`Function/task '${funcName}' already declared at line ${existing.line + 1}`, lineIndex, column, funcName.length);
+        this.addError(
+          `Function/task '${funcName}' already declared at line ${existing.line + 1}`,
+          lineIndex,
+          column,
+          funcName.length
+        );
       } else if (!existing.conditional || !isConditional) {
         const column = originalLine.indexOf(funcName);
-        this.addError(`Function/task '${funcName}' conflicts with declaration at line ${existing.line + 1}`, lineIndex, column, funcName.length);
+        this.addError(
+          `Function/task '${funcName}' conflicts with declaration at line ${existing.line + 1}`,
+          lineIndex,
+          column,
+          funcName.length
+        );
       } else if (existing.conditional && !isConditional) {
         declaredFunctions.set(funcName, { line: lineIndex, conditional: false });
       }
@@ -209,11 +254,15 @@ class SimpleNXCParser {
     }
 
     const allVarDeclarations = [
-      ...trimmed.matchAll(/\b(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\s*=\s*[^,;]+)?(?:\s*,\s*[a-zA-Z_][a-zA-Z0-9_]*(?:\s*=\s*[^,;]+)?)*)/g)
+      ...trimmed.matchAll(
+        /\b(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\s*=\s*[^,;]+)?(?:\s*,\s*[a-zA-Z_][a-zA-Z0-9_]*(?:\s*=\s*[^,;]+)?)*)/g
+      )
     ];
 
     allVarDeclarations.forEach((match) => {
-      if (trimmed.match(/for\s*\(\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+/)) {
+      if (
+        trimmed.match(/for\s*\(\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+/)
+      ) {
         return;
       }
 
@@ -233,7 +282,12 @@ class SimpleNXCParser {
             const currentScope = scopes[scopes.length - 1];
             if (currentScope.has(varName)) {
               const existing = currentScope.get(varName);
-              this.addError(`Variable '${varName}' already declared at line ${existing.line + 1}`, lineIndex, column, varName.length);
+              this.addError(
+                `Variable '${varName}' already declared at line ${existing.line + 1}`,
+                lineIndex,
+                column,
+                varName.length
+              );
             } else {
               currentScope.set(varName, { line: lineIndex, column, used: false });
             }
@@ -244,7 +298,9 @@ class SimpleNXCParser {
   }
 
   handleForLoopVariables(trimmed, originalLine, lineIndex, scopes, funcDeclaration) {
-    const forLoopVarMatch = trimmed.match(/for\s*\(\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+(\w+)/);
+    const forLoopVarMatch = trimmed.match(
+      /for\s*\(\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+(\w+)/
+    );
     if (forLoopVarMatch) {
       const varName = forLoopVarMatch[2];
       const column = originalLine.indexOf(varName);
@@ -256,10 +312,25 @@ class SimpleNXCParser {
     }
   }
 
-  manageScopesAndDeclarations(cleanedLine, trimmed, originalLine, lineIndex, scopes, funcDeclaration, calledFunctions, builtInFunctions, declaredMacros) {
+  manageScopesAndDeclarations(
+    cleanedLine,
+    trimmed,
+    originalLine,
+    lineIndex,
+    scopes,
+    funcDeclaration,
+    calledFunctions,
+    builtInFunctions,
+    declaredMacros
+  ) {
     const openCount = (cleanedLine.match(/{/g) || []).length;
     for (let i = 0; i < openCount; i++) {
-      if (!trimmed.match(/for\s*\(\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+/) && !funcDeclaration) {
+      if (
+        !trimmed.match(
+          /for\s*\(\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+/
+        ) &&
+        !funcDeclaration
+      ) {
         scopes.push(new Map());
       }
     }
@@ -285,11 +356,17 @@ class SimpleNXCParser {
       if (funcMatch && funcMatch[1].trim()) {
         const params = funcMatch[1].split(',');
         params.forEach((param) => {
-          const paramMatch = param.trim().match(/^\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+(\w+)/);
+          const paramMatch = param
+            .trim()
+            .match(/^\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+(\w+)/);
           if (paramMatch) {
             const paramName = paramMatch[2];
             const functionScope = scopes[scopes.length - 1];
-            functionScope.set(paramName, { line: lineIndex, column: originalLine.indexOf(paramName), used: false });
+            functionScope.set(paramName, {
+              line: lineIndex,
+              column: originalLine.indexOf(paramName),
+              used: false
+            });
           }
         });
       }
@@ -303,7 +380,17 @@ class SimpleNXCParser {
     }
   }
 
-  analyzeVariableUsages(trimmed, originalLine, lineIndex, scopes, builtInFunctions, declaredFunctions, declaredMacros, inMultilineMacro, funcDeclaration) {
+  analyzeVariableUsages(
+    trimmed,
+    originalLine,
+    lineIndex,
+    scopes,
+    builtInFunctions,
+    declaredFunctions,
+    declaredMacros,
+    inMultilineMacro,
+    funcDeclaration
+  ) {
     if (trimmed.startsWith('#') || inMultilineMacro || funcDeclaration) {
       return;
     }
@@ -325,10 +412,23 @@ class SimpleNXCParser {
             break;
           }
         }
-        if (!found && !trimmed.match(new RegExp(`\\b${varName}\\s*\\(`)) && !trimmed.match(new RegExp(`^\\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\\s+${varName}\\b`))) {
+        if (
+          !found &&
+          !trimmed.match(new RegExp(`\\b${varName}\\s*\\(`)) &&
+          !trimmed.match(
+            new RegExp(
+              `^\\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\\s+${varName}\\b`
+            )
+          )
+        ) {
           const column = originalLine.indexOf(varName);
           if (column >= 0) {
-            this.addError(`Variable '${varName}' is not defined`, lineIndex, column, varName.length);
+            this.addError(
+              `Variable '${varName}' is not defined`,
+              lineIndex,
+              column,
+              varName.length
+            );
           }
         }
       }
@@ -347,11 +447,18 @@ class SimpleNXCParser {
         this.addError('Array access on braced initializer is not allowed', lineNum, col);
       }
     } catch (err) {
-      vscode.window.showWarningMessage(`Error checking braced-initializer accesses: ${err.message}`);
+      vscode.window.showWarningMessage(
+        `Error checking braced-initializer accesses: ${err.message}`
+      );
     }
   }
 
-  suggestAlternativeFunctions(calledFunctions, declaredFunctions, declaredMacros, builtInFunctions) {
+  suggestAlternativeFunctions(
+    calledFunctions,
+    declaredFunctions,
+    declaredMacros,
+    builtInFunctions
+  ) {
     const builtInsArray = Array.from(builtInFunctions);
     for (const [funcName, info] of calledFunctions) {
       if (declaredFunctions.has(funcName) || declaredMacros.has(funcName)) {
@@ -368,7 +475,12 @@ class SimpleNXCParser {
       }
       const threshold = funcName.length <= 4 ? 1 : 2;
       if (best && bestDist <= threshold) {
-        this.addWarning(`Function '${funcName}' is not defined. Did you mean '${best}'?`, info.line, info.column, funcName.length);
+        this.addWarning(
+          `Function '${funcName}' is not defined. Did you mean '${best}'?`,
+          info.line,
+          info.column,
+          funcName.length
+        );
       }
     }
   }
@@ -735,7 +847,12 @@ class SimpleNXCParser {
   checkLinePatterns(line, lineIndex) {
     const trimmed = line.trim();
 
-    if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*') || !trimmed) {
+    if (
+      trimmed.startsWith('//') ||
+      trimmed.startsWith('/*') ||
+      trimmed.startsWith('*') ||
+      !trimmed
+    ) {
       return;
     }
 
@@ -748,7 +865,11 @@ class SimpleNXCParser {
     }
 
     const leadingWhitespace = line.match(/^[\t ]+/);
-    if (leadingWhitespace && leadingWhitespace[0].includes('\t') && leadingWhitespace[0].includes(' ')) {
+    if (
+      leadingWhitespace &&
+      leadingWhitespace[0].includes('\t') &&
+      leadingWhitespace[0].includes(' ')
+    ) {
       this.addWarning('Mixed tabs and spaces for indentation', lineIndex, 0);
     }
 
@@ -764,15 +885,36 @@ class SimpleNXCParser {
     const trimmed = line.trim();
     const codeOnly = trimmed.replace(/\/\/.*$/, '').trim();
 
-    if (!codeOnly || trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*') || codeOnly.endsWith(';') || codeOnly.endsWith('{') || codeOnly.endsWith('}') || trimmed.startsWith('#') || codeOnly.match(/^\s*}\s*$/) || codeOnly.match(/^\s*{\s*$/) || codeOnly.match(/^\s*}\s*else/)) {
+    if (
+      !codeOnly ||
+      trimmed.startsWith('//') ||
+      trimmed.startsWith('/*') ||
+      trimmed.startsWith('*') ||
+      codeOnly.endsWith(';') ||
+      codeOnly.endsWith('{') ||
+      codeOnly.endsWith('}') ||
+      trimmed.startsWith('#') ||
+      codeOnly.match(/^\s*}\s*$/) ||
+      codeOnly.match(/^\s*{\s*$/) ||
+      codeOnly.match(/^\s*}\s*else/)
+    ) {
       return false;
     }
 
-    if (codeOnly.match(/^\s*(if|while|for|until|repeat|switch)\s*\(/) || codeOnly.match(/^\s*else\s*$/) || codeOnly.includes('case ') || codeOnly.includes('default:')) {
+    if (
+      codeOnly.match(/^\s*(if|while|for|until|repeat|switch)\s*\(/) ||
+      codeOnly.match(/^\s*else\s*$/) ||
+      codeOnly.includes('case ') ||
+      codeOnly.includes('default:')
+    ) {
       return false;
     }
 
-    if (codeOnly.match(/^\s*(task|sub|void|int|float|bool|byte|char|string|long|short|unsigned)\s+\w+\s*\([^)]*\)\s*\{?\s*$/)) {
+    if (
+      codeOnly.match(
+        /^\s*(task|sub|void|int|float|bool|byte|char|string|long|short|unsigned)\s+\w+\s*\([^)]*\)\s*\{?\s*$/
+      )
+    ) {
       return false;
     }
 

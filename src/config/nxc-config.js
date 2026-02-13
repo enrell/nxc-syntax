@@ -31,7 +31,7 @@ class NXCConfig {
   }
 
   onConfigurationChanged(callback) {
-    return vscode.workspace.onDidChangeConfiguration(event => {
+    return vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration(this.configSection)) {
         callback();
       }

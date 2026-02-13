@@ -177,7 +177,10 @@ NXC {
           start: { line: lineInfo.line, character: lineInfo.column },
           end: {
             line: lineInfo.line,
-            character: Math.min(lineInfo.column + 10, sourceCode.split('\n')[lineInfo.line]?.length || lineInfo.column + 1)
+            character: Math.min(
+              lineInfo.column + 10,
+              sourceCode.split('\n')[lineInfo.line]?.length || lineInfo.column + 1
+            )
           }
         }
       });

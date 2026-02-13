@@ -100,7 +100,9 @@ class DiagnosticManager {
         if (Object.keys(bracketPairs).includes(char)) {
           stack.push({ char, line: lineIndex, column: columnIndex });
         } else if (Object.values(bracketPairs).includes(char)) {
-          const expectedOpening = Object.keys(bracketPairs).find((key) => bracketPairs[key] === char);
+          const expectedOpening = Object.keys(bracketPairs).find(
+            (key) => bracketPairs[key] === char
+          );
 
           if (stack.length === 0 || stack[stack.length - 1].char !== expectedOpening) {
             const errorMessages = {
@@ -170,7 +172,13 @@ class DiagnosticManager {
       conditionalDepth = this.updateConditionalDepth(trimmedLine, conditionalDepth);
     });
 
-    const errors = this.findUndefinedFunctions(calledFunctions, declaredFunctions, declaredMacros, builtInFunctions, cleanedCode);
+    const errors = this.findUndefinedFunctions(
+      calledFunctions,
+      declaredFunctions,
+      declaredMacros,
+      builtInFunctions,
+      cleanedCode
+    );
     const warnings = [];
 
     return { errors, warnings };
@@ -229,11 +237,22 @@ class DiagnosticManager {
     }
   }
 
-  handleFunctionDeclaration(funcName, lineIndex, originalLine, declaredFunctions, builtInFunctions, isConditional) {
+  handleFunctionDeclaration(
+    funcName,
+    lineIndex,
+    originalLine,
+    declaredFunctions,
+    builtInFunctions,
+    isConditional
+  ) {
     if (declaredFunctions.has(funcName)) {
       const existing = declaredFunctions.get(funcName);
       if (!existing.conditional && !isConditional) {
-        return { error: `Function/task '${funcName}' already declared`, lineIndex, column: originalLine.indexOf(funcName) };
+        return {
+          error: `Function/task '${funcName}' already declared`,
+          lineIndex,
+          column: originalLine.indexOf(funcName)
+        };
       }
     } else {
       if (builtInFunctions.has(funcName) && funcName !== 'main') {
@@ -259,10 +278,20 @@ class DiagnosticManager {
     return currentDepth;
   }
 
-  findUndefinedFunctions(calledFunctions, declaredFunctions, declaredMacros, builtInFunctions, cleanedCode) {
+  findUndefinedFunctions(
+    calledFunctions,
+    declaredFunctions,
+    declaredMacros,
+    builtInFunctions,
+    cleanedCode
+  ) {
     const errors = [];
     for (const funcName of calledFunctions) {
-      if (!declaredFunctions.has(funcName) && !builtInFunctions.has(funcName) && !declaredMacros.has(funcName)) {
+      if (
+        !declaredFunctions.has(funcName) &&
+        !builtInFunctions.has(funcName) &&
+        !declaredMacros.has(funcName)
+      ) {
         const callLine = this.findFunctionCallLine(cleanedCode, funcName);
         if (callLine >= 0) {
           errors.push({

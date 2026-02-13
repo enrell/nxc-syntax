@@ -11,7 +11,8 @@ class NXCFormatter {
       const config = vscode.workspace.getConfiguration('nxc.formatting');
       return {
         indentSize: options.tabSize || config.get('indentSize', 4),
-        useSpaces: options.insertSpaces !== undefined ? options.insertSpaces : config.get('useSpaces', true)
+        useSpaces:
+          options.insertSpaces !== undefined ? options.insertSpaces : config.get('useSpaces', true)
       };
     }
     return {
@@ -74,8 +75,18 @@ class NXCFormatter {
         continue;
       }
 
-      if (this.handleCommentLine(trimmedLine, line, formattedLines, indentLevel, indentChar, inMultiLineComment)) {
-        inMultiLineComment = formattedLines[formattedLines.length - 1] !== '' && !line.includes('*/');
+      if (
+        this.handleCommentLine(
+          trimmedLine,
+          line,
+          formattedLines,
+          indentLevel,
+          indentChar,
+          inMultiLineComment
+        )
+      ) {
+        inMultiLineComment =
+          formattedLines[formattedLines.length - 1] !== '' && !line.includes('*/');
         continue;
       }
 
@@ -111,7 +122,10 @@ class NXCFormatter {
         needsUnindentAfterStatement = false;
       }
 
-      const indentChange = this.calculateIndentChange(trimmedLine, i > 0 ? lines[i - 1].trim() : '');
+      const indentChange = this.calculateIndentChange(
+        trimmedLine,
+        i > 0 ? lines[i - 1].trim() : ''
+      );
       indentLevel = Math.max(0, indentLevel + indentChange.pre);
 
       const formattedLine = this.formatLine(trimmedLine);
@@ -127,7 +141,14 @@ class NXCFormatter {
     return formattedLines;
   }
 
-  handleCommentLine(trimmedLine, originalLine, formattedLines, indentLevel, indentChar, inMultiLineComment) {
+  handleCommentLine(
+    trimmedLine,
+    originalLine,
+    formattedLines,
+    indentLevel,
+    indentChar,
+    inMultiLineComment
+  ) {
     if (trimmedLine.startsWith('/*')) {
       if (!trimmedLine.includes('*/')) {
         formattedLines.push(this.indentLine(originalLine, indentLevel, indentChar));

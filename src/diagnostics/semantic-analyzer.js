@@ -7,7 +7,17 @@ class SemanticAnalyzer {
     this.warnings = [];
     this.builtInFunctions = new Set();
     this.builtInConstants = new Set();
-    this.builtInTypes = new Set(['void', 'int', 'float', 'byte', 'char', 'string', 'bool', 'mutex', 'variant']);
+    this.builtInTypes = new Set([
+      'void',
+      'int',
+      'float',
+      'byte',
+      'char',
+      'string',
+      'bool',
+      'mutex',
+      'variant'
+    ]);
 
     this.initializeBuiltIns();
   }
