@@ -145,11 +145,10 @@ class DiagnosticManager {
 
     const builtInFunctions = this.loadBuiltInFunctions();
     const declaredVariables = new Map();
-    const declaredFunctions = new Map(); // Will map name -> { line, conditional }
+        const declaredFunctions = new Map();
     const calledFunctions = new Set();
     const declaredMacros = new Set();
 
-    // Track preprocessor conditional nesting
     let conditionalDepth = 0;
 
     cleanedLines.forEach((cleanedLine, lineIndex) => {
@@ -160,7 +159,6 @@ class DiagnosticManager {
         return;
       }
 
-      // Look for macro definitions and add them to our set
       const macroDefinition = trimmedLine.match(/^\s*#\s*define\s+([a-zA-Z_][a-zA-Z0-9_]*)/);
       if (macroDefinition) {
         const macroName = macroDefinition[1];
@@ -168,7 +166,6 @@ class DiagnosticManager {
         declaredMacros.add(macroName);
       }
 
-      // Track preprocessor conditionals
       const pp = trimmedLine.match(/^#\s*(if|ifdef|ifndef|else|endif)\b/);
       if (pp) {
         const directive = pp[1];
@@ -194,7 +191,6 @@ class DiagnosticManager {
         
         if (declaredFunctions.has(funcName)) {
           const existing = declaredFunctions.get(funcName);
-          // Flag as error if both are non-conditional OR if one is non-conditional (will conflict)
           if (!existing.conditional && !isConditional) {
             errors.push({ 
               message: `Function/task '${funcName}' already declared at line ${existing.line + 1}`, 
@@ -212,9 +208,7 @@ class DiagnosticManager {
               source: 'semantic-analyzer' 
             });
           }
-          // Both are conditional - that's fine, they're in different preprocessor branches
           
-          // Update to keep the non-conditional one if there is one
           if (existing.conditional && !isConditional) {
             declaredFunctions.set(funcName, { line: lineIndex, conditional: false });
           }
@@ -245,7 +239,6 @@ class DiagnosticManager {
       this.checkLinePatterns(originalLine, cleanedLine, lineIndex, warnings);
     });
 
-    // FIX: When checking for undefined functions, also check if the name is a known macro
     for (const funcName of calledFunctions) {
       if (!declaredFunctions.has(funcName) && !builtInFunctions.has(funcName) && !declaredMacros.has(funcName)) {
         const callLine = this.findFunctionCallLine(cleanedCode, funcName);
