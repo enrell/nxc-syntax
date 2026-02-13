@@ -23,13 +23,22 @@
     "dev": "bun run build.js",
     "package": "bunx vsce package",
     "login": "bunx vsce login",
-    "publish": "bunx vsce publish"
+    "publish": "bunx vsce publish",
+    "lint": "eslint src/**/*.js",
+    "lint:fix": "eslint src/**/*.js --fix",
+    "format": "prettier --write src/**/*.js",
+    "format:check": "prettier --check src/**/*.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
     "@types/vscode": "^1.90.0",
     "typescript": "^5.9.2",
-    "@vscode/vsce": "^3.6.0"
+    "@vscode/vsce": "^3.6.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.3.0"
   },
   "contributes": {
     "languages": [
