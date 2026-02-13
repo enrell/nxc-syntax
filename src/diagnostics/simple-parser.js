@@ -83,20 +83,15 @@ class SimpleNXCParser {
     const cleanedLines = cleanedCode.split(/\r?\n/);
     
   const builtInFunctions = this.loadBuiltInFunctions();
-  // declaredFunctions will map name -> { line, conditional }
   const declaredFunctions = new Map();
-  // initialize built-ins as declared (non-conditional)
   builtInFunctions.forEach(fn => declaredFunctions.set(fn, { line: -1, conditional: false }));
   const calledFunctions = new Map();
     
-    // FIX: Add a set to store the names of all defined macros
     const declaredMacros = new Set();
     
     let scopes = [new Map()];
 
-  // Track preprocessor conditional nesting so we can avoid flagging duplicates across branches
   let conditionalDepth = 0;
-    // First pass: collect macros and declarations
     cleanedLines.forEach((cleanedLine, lineIndex) => {
       const originalLine = lines[lineIndex];
       const trimmed = cleanedLine.trim();
@@ -121,7 +116,6 @@ class SimpleNXCParser {
           declaredFunctions.set(funcName, { line: lineIndex, conditional: isConditional });
         } else {
           const existing = declaredFunctions.get(funcName);
-          // Flag as error if both are non-conditional OR if one is non-conditional (will conflict)
           if (!existing.conditional && !isConditional) {
             const column = originalLine.indexOf(funcName);
             this.addError(`Function/task '${funcName}' already declared at line ${existing.line + 1}`, lineIndex, column, funcName.length);
@@ -129,10 +123,8 @@ class SimpleNXCParser {
             const column = originalLine.indexOf(funcName);
             this.addError(`Function/task '${funcName}' conflicts with declaration at line ${existing.line + 1}`, lineIndex, column, funcName.length);
           } else {
-            // Both are conditional - that's fine, they're in different preprocessor branches
           }
           
-          // Update to keep the non-conditional one if there is one
           if (existing.conditional && !isConditional) {
             declaredFunctions.set(funcName, { line: lineIndex, conditional: false });
           }
@@ -140,10 +132,8 @@ class SimpleNXCParser {
       }
     });
 
-    // Second pass: validate calls/usages
     conditionalDepth = 0;
     let inMultilineMacro = false;
-    // Helper: split by top-level commas (ignore commas inside (), {}, [], or strings)
     function splitTopLevelCommas(s) {
       const parts = [];
       let buf = '';
@@ -177,10 +167,8 @@ class SimpleNXCParser {
       const trimmed = cleanedLine.trim();
       if (!trimmed) return;
 
-      // Check for function declaration early in the loop
       const funcDeclaration = trimmed.match(/^\s*(?:(?:inline|safecall|static)\s+)*?(?:task|sub|void|int|float|byte|char|string|bool|long|short|unsigned)\s+(\w+)\s*\(/);
 
-      // Check if we're continuing a multiline macro from previous line
       if (lineIndex > 0) {
         const prevLine = lines[lineIndex - 1].trim();
         if (prevLine.endsWith('\\')) {
@@ -190,12 +178,10 @@ class SimpleNXCParser {
         }
       }
 
-      // Check if this line starts a multiline macro
       if (trimmed.startsWith('#define') && originalLine.trim().endsWith('\\')) {
         inMultilineMacro = true;
       }
 
-      // Skip processing if we're in a multiline macro continuation
       if (inMultilineMacro && !trimmed.startsWith('#')) {
         return;
       }
@@ -207,23 +193,17 @@ class SimpleNXCParser {
         else if (directive === 'endif') conditionalDepth = Math.max(0, conditionalDepth - 1);
       }
       
-      // Handle multiple variable declarations on the same line
-      // But skip for-loop variable declarations and function parameters as they're handled separately
-      // Match variable declarations but skip function declarations
       if (!funcDeclaration) {
         const allVarDeclarations = [...trimmed.matchAll(/\b(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\s*=\s*[^,;]+)?(?:\s*,\s*[a-zA-Z_][a-zA-Z0-9_]*(?:\s*=\s*[^,;]+)?)*)/g)];
         allVarDeclarations.forEach(match => {
-          // Skip if this is a for-loop variable declaration
           if (trimmed.match(/for\s*\(\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+/)) {
             return;
           }
         
         const type = match[1];
         const varList = match[2];
-        // Handle comma-separated variable declarations
         const varNames = splitTopLevelCommas(varList).map(v => {
           const trimmed = v.trim();
-          // Extract variable name before any assignment, array brackets, or other operators
           const match = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)/);
           return match ? match[1] : null;
         }).filter(name => name);
@@ -245,30 +225,24 @@ class SimpleNXCParser {
         });
       }
       
-      // Handle for loop variable declarations like "for (int i = 1000; ...)"
       const forLoopVarMatch = trimmed.match(/for\s*\(\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\s+(\w+)/);
       if (forLoopVarMatch) {
         const varName = forLoopVarMatch[2];
         const column = originalLine.indexOf(varName);
         if (column >= 0) {
-          // For-loop variable declarations create a new scope (like in C)
-          // This allows shadowing of outer scope variables
           scopes.push(new Map());
           const forLoopScope = scopes[scopes.length - 1];
           forLoopScope.set(varName, { line: lineIndex, column, used: false });
         }
       }
       
-      // Handle scope changes from braces AFTER for-loop variable handling
       const openCount = (cleanedLine.match(/{/g) || []).length;
       for (let i = 0; i < openCount; i++) {
-        // Only create new scope if we haven't already created one for a for-loop or function declaration
         if (!forLoopVarMatch && !funcDeclaration) {
           scopes.push(new Map());
         }
       }
       
-      // collect function calls and var usages for the second pass
       const funcCalls = [...trimmed.matchAll(/(\w+)\s*\(/g)];
       funcCalls.forEach(match => {
         const funcName = match[1];
@@ -278,9 +252,7 @@ class SimpleNXCParser {
         }
       });
       
-      // Parse function parameters and add them to a new function scope BEFORE processing variable usage
       if (funcDeclaration) {
-        // Create a new scope for function parameters
         scopes.push(new Map());
         const funcMatch = trimmed.match(/^\s*(?:(?:inline|safecall|static)\s+)*?(?:task|sub|void|int|float|byte|char|string|bool|long|short|unsigned)\s+\w+\s*\(([^)]*)\)/);
         if (funcMatch && funcMatch[1].trim()) {
@@ -290,22 +262,16 @@ class SimpleNXCParser {
             if (paramMatch) {
               const paramName = paramMatch[2];
               const functionScope = scopes[scopes.length - 1];
-              // Function parameters are always in their own scope, no need to check for duplicates across functions
               functionScope.set(paramName, { line: lineIndex, column: originalLine.indexOf(paramName), used: false });
             }
           });
         }
       }
   
-      // Check variable usage in all non-preprocessor lines and non-macro continuation lines
-      // Skip variable usage checking on function declaration lines
       if (!trimmed.startsWith('#') && !inMultilineMacro && !funcDeclaration) {
         const varUsages = [...trimmed.matchAll(/\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g)];
         varUsages.forEach(match => {
           const varName = match[1];
-          // Treat declared functions (tasks/subs) as known symbols so they are not
-          // reported as undefined when used as identifiers (for example, passed
-          // as an argument to StartTask).
           if (!this.isKeyword(varName) && !declaredMacros.has(varName) && !builtInFunctions.has(varName) && !this.isBuiltInConstant(varName) && !declaredFunctions.has(varName)) {
             let found = false;
             for (let s = scopes.length - 1; s >= 0; s--) {
@@ -315,7 +281,6 @@ class SimpleNXCParser {
                 break;
               }
             }
-            // Check if it's an undefined variable (but not in function calls or variable declarations)
             if (!found && 
                 !trimmed.match(new RegExp(`\\b${varName}\\s*\\(`)) && 
                 !trimmed.match(new RegExp(`^\\s*(int|float|byte|char|string|bool|mutex|long|short|unsigned)\\s+${varName}\\b`))) {
@@ -336,21 +301,17 @@ class SimpleNXCParser {
       }
     });
 
-    // Additional semantic/syntax check: disallow array access immediately after a braced initializer
-    // e.g. int y = {1, 2, 3}[0];  --> invalid in NXC
     try {
       const badInitRegex = /=\s*\{[\s\S]*?\}\s*\[/g; // matches '=' then a braced initializer then '['
       let m;
       while ((m = badInitRegex.exec(cleanedCode)) !== null) {
         const idx = m.index;
-        // compute line/column
         const upto = sourceCode.substring(0, idx);
         const lineNum = upto.split(/\r?\n/).length - 1;
         const col = upto.split(/\r?\n/).pop().length;
         this.addError("Array access on braced initializer is not allowed", lineNum, col);
       }
     } catch (err) {
-      // don't crash analysis on regex issues
       console.warn('Error checking braced-initializer accesses:', err.message);
     }
     
@@ -361,13 +322,10 @@ class SimpleNXCParser {
             !varName.startsWith('g') &&
             varName !== 'main' &&
             varName.length > 1) {
-          // this.addWarning(`Variable '${varName}' declared but never used`, info.line, info.column, varName.length);
         }
       }
     });
     
-    // Reintroduce helpful warnings: if an undefined function closely matches a built-in name,
-    // warn with suggestion. Otherwise, do not warn to avoid noisy diagnostics.
     function levenshtein(a, b) {
       if (a === b) return 0;
       const m = a.length, n = b.length;
@@ -386,7 +344,6 @@ class SimpleNXCParser {
     const builtInsArray = Array.from(builtInFunctions);
     for (const [funcName, info] of calledFunctions) {
       if (declaredFunctions.has(funcName) || declaredMacros.has(funcName)) continue;
-      // find best match among built-ins
       let best = null;
       let bestDist = Infinity;
       for (const bi of builtInsArray) {
@@ -412,7 +369,6 @@ class SimpleNXCParser {
       const char = sourceCode[i];
       const nextChar = sourceCode[i + 1];
 
-      // helper: peek next non-whitespace character after index i
       function peekNextNonSpace(idx) {
         let j = idx + 1;
         while (j < sourceCode.length && (sourceCode[j] === ' ' || sourceCode[j] === '\t')) j++;
@@ -570,7 +526,6 @@ class SimpleNXCParser {
       'LCD_LINE1', 'LCD_LINE2', 'LCD_LINE3', 'LCD_LINE4', 'LCD_LINE5', 'LCD_LINE6', 'LCD_LINE7', 'LCD_LINE8',
       'NO_ERR', 'ERR_ARG', 'ERR_INVAL', 'ERR_FILE', 'ERR_COMM',
       'COL_BLACK', 'COL_BLUE', 'COL_GREEN', 'COL_YELLOW', 'COL_RED', 'COL_WHITE', 'COL_BROWN',
-      // Output mode constants
       'OUT_MODE_MOTORON', 'OUT_MODE_BRAKE', 'OUT_MODE_REGULATED', 'OUT_MODE_COAST',
       'OUT_REGMODE_IDLE', 'OUT_REGMODE_SPEED', 'OUT_REGMODE_SYNC',
       'OUT_RUNSTATE_IDLE', 'OUT_RUNSTATE_RAMPUP', 'OUT_RUNSTATE_RUNNING', 'OUT_RUNSTATE_RAMPDOWN'
@@ -609,10 +564,8 @@ class SimpleNXCParser {
   shouldHaveSemicolon(line) {
     const trimmed = line.trim();
     
-    // Remove inline comments for analysis
     const codeOnly = trimmed.replace(/\/\/.*$/, '').trim();
     
-    // Lines that should NOT have semicolons
     if (!codeOnly || 
         trimmed.startsWith('//') || 
         trimmed.startsWith('/*') || 
@@ -627,7 +580,6 @@ class SimpleNXCParser {
       return false;
     }
     
-    // Control structures that don't need semicolons
     if (codeOnly.match(/^\s*(if|while|for|until|repeat|switch)\s*\(/) ||
         codeOnly.match(/^\s*else\s*$/) ||
         codeOnly.includes('case ') ||
@@ -635,28 +587,23 @@ class SimpleNXCParser {
       return false;
     }
     
-    // Function/task declarations don't need semicolons
     if (codeOnly.match(/^\s*(task|sub|void|int|float|bool|byte|char|string|long|short|unsigned)\s+\w+\s*\([^)]*\)\s*\{?\s*$/)) {
       return false;
     }
     
-    // Variable declarations that should have semicolons
     if (codeOnly.match(/^\s*(int|float|bool|byte|char|string|long|short|unsigned)\s+\w+/)) {
       return true;
     }
     
-    // Assignment statements that should have semicolons
     if (codeOnly.match(/^\s*\w+\s*=/)) {
       return true;
     }
     
-    // Function calls that should have semicolons (but not control structures)
     if (codeOnly.match(/^\s*\w+\s*\([^)]*\)\s*$/) && 
         !codeOnly.match(/^\s*(if|while|for|until|repeat|switch)\s*\(/)) {
       return true;
     }
     
-    // Return, break, continue statements
     if (codeOnly.match(/^\s*(return|break|continue)(\s|$)/)) {
       return true;
     }
