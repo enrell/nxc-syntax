@@ -1,8 +1,8 @@
 class SemanticAnalyzer {
-  constructor() {
-    this.symbols = new Map(); // Symbol table
-    this.scopes = []; // Scope stack
-    this.functions = new Map(); // Defined functions
+    constructor() {
+        this.symbols = new Map();
+        this.scopes = [];
+        this.functions = new Map();
     this.errors = [];
     this.warnings = [];
     this.builtInFunctions = new Set();
@@ -13,19 +13,16 @@ class SemanticAnalyzer {
   }
 
   initializeBuiltIns() {
-    // Load NXC API functions from utils file
     const fs = require('fs');
     const path = require('path');
     
     try {
-      // Load API functions
       const apiPath = path.join(__dirname, '../../utils/nxc_api.txt');
       const apiContent = fs.readFileSync(apiPath, 'utf8');
       const apiFunctions = apiContent.split('\n')
         .map(line => line.trim())
         .filter(line => line && !line.startsWith('//'))
         .map(line => {
-          // Extract function name from signature like "OnFwd(byte outputs, char pwr)"
           const match = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/);
           return match ? match[1] : null;
         })
@@ -33,7 +30,6 @@ class SemanticAnalyzer {
       
       apiFunctions.forEach(fn => this.builtInFunctions.add(fn));
       
-      // Load constants
       const constantsPath = path.join(__dirname, '../../utils/nxc_constants.txt');
       if (fs.existsSync(constantsPath)) {
         const constantsContent = fs.readFileSync(constantsPath, 'utf8');
@@ -43,7 +39,6 @@ class SemanticAnalyzer {
         constants.forEach(constant => this.builtInConstants.add(constant));
       }
       
-      // Load keywords
       const keywordsPath = path.join(__dirname, '../../utils/nxc_keywords.txt');
       if (fs.existsSync(keywordsPath)) {
         const keywordsContent = fs.readFileSync(keywordsPath, 'utf8');
@@ -55,7 +50,6 @@ class SemanticAnalyzer {
       
     } catch (error) {
       console.warn('Could not load NXC API files, using fallback:', error.message);
-      // Fallback to basic set
       const builtIns = [
         'OnFwd', 'OnRev', 'Off', 'Wait', 'CurrentTick', 'Sensor', 'ColorSensor', 'SensorUS',
         'SetSensorColorFull', 'SetSensorUltrasonic', 'ResetRotationCount', 'MotorRotationCount',
@@ -64,7 +58,6 @@ class SemanticAnalyzer {
       builtIns.forEach(fn => this.builtInFunctions.add(fn));
     }
     
-    // Built-in constants
     const constants = [
       'TRUE', 'FALSE', 'NULL', 'true', 'false',
       'OUT_A', 'OUT_B', 'OUT_C', 'OUT_AB', 'OUT_AC', 'OUT_BC', 'OUT_ABC',
@@ -79,11 +72,10 @@ class SemanticAnalyzer {
     this.errors = [];
     this.warnings = [];
     this.symbols.clear();
-    this.scopes = [new Map()]; // Global scope
+        this.scopes = [new Map()];
     this.functions.clear();
     
     try {
-  // Pre-scan: collect all function/task/sub declarations to avoid ordering issues
   this.preScanDeclarations(ast);
   this.visitNode(ast);
     } catch (error) {
@@ -135,7 +127,6 @@ class SemanticAnalyzer {
         this.visitIdentifier(node);
         break;
       default:
-        // Visit children recursively
         if (node.children) {
           node.children.forEach(child => this.visitNode(child));
         }
@@ -147,7 +138,6 @@ class SemanticAnalyzer {
       node.children.forEach(child => this.visitNode(child));
     }
     
-    // Check if main function/task exists
     if (!this.functions.has('main')) {
       this.warnings.push({
         message: 'No "main" function or task found',
@@ -181,18 +171,14 @@ class SemanticAnalyzer {
       });
     }
     
-    // Enter function scope
     this.enterScope();
     
-    // Add parameters to scope
     params.forEach(param => {
       this.addSymbol(param.name, param.type, param.line || 0);
     });
     
-    // Visit function body
     this.visitNode(node.body);
     
-    // Exit function scope
     this.exitScope();
   }
 
@@ -217,13 +203,10 @@ class SemanticAnalyzer {
       });
     }
     
-    // Enter task scope
     this.enterScope();
     
-    // Visit task body
     this.visitNode(node.body);
     
-    // Exit task scope
     this.exitScope();
   }
 
@@ -250,9 +233,7 @@ class SemanticAnalyzer {
     const functionName = this.extractIdentifier(node.callee);
     const args = this.extractArguments(node.arguments);
     
-    // Check if function exists
     if (!this.functions.has(functionName) && !this.builtInFunctions.has(functionName)) {
-      // Suggest closest built-in if similar
       const suggestion = this.bestBuiltInMatch(functionName);
       if (suggestion) {
         this.warnings.push({
@@ -263,10 +244,8 @@ class SemanticAnalyzer {
           source: 'semantic-analyzer'
         });
       } else {
-        // keep silent (no error) to avoid false positives for external APIs
       }
     } else if (this.functions.has(functionName)) {
-      // Check number of arguments
       const funcDef = this.functions.get(functionName);
       if (args.length !== funcDef.parameters.length) {
         this.errors.push({
@@ -279,7 +258,6 @@ class SemanticAnalyzer {
       }
     }
     
-    // Visit arguments
     if (node.arguments) {
       node.arguments.forEach(arg => this.visitNode(arg));
     }
@@ -289,7 +267,6 @@ class SemanticAnalyzer {
     const name = this.extractIdentifier(node);
     
     if (!this.isSymbolDefined(name) && !this.builtInConstants.has(name) && !this.functions.has(name)) {
-      // suggest constant if close
       const suggestion = this.bestConstantMatch(name);
       if (suggestion) {
         this.warnings.push({
@@ -300,12 +277,10 @@ class SemanticAnalyzer {
           source: 'semantic-analyzer'
         });
       } else {
-        // otherwise, be silent to avoid false positives
       }
     }
   }
 
-  // Pre-scan helpers
   preScanDeclarations(ast) {
     if (!ast || !ast.children) return;
     ast.children.forEach(node => {
@@ -316,15 +291,12 @@ class SemanticAnalyzer {
         if (!this.functions.has(name)) {
           this.functions.set(name, { name, parameters: this.extractParameters(node.parameters || []), line: node.line || 0, isTask: nodeType === 'TaskDefinition' });
         } else {
-          // prefer non-conditional later (AST doesn't carry preprocessor info here)
         }
       }
-      // Recurse
       if (node.children) node.children.forEach(child => this.preScanDeclarations(child));
     });
   }
 
-  // Fuzzy match helpers for suggestions
   bestBuiltInMatch(name) {
     const candidates = Array.from(this.builtInFunctions);
     let best = null, bestDist = Infinity;
@@ -378,7 +350,6 @@ class SemanticAnalyzer {
     }
   }
 
-  // Helper methods
   enterScope() {
     this.scopes.push(new Map());
   }
@@ -393,7 +364,6 @@ class SemanticAnalyzer {
     const currentScope = this.scopes[this.scopes.length - 1];
     currentScope.set(name, { type, line, used: false });
     
-    // Add to global symbol map
     this.symbols.set(name, { type, line, scope: this.scopes.length - 1 });
   }
 
@@ -405,7 +375,6 @@ class SemanticAnalyzer {
   isSymbolDefined(name) {
     for (let i = this.scopes.length - 1; i >= 0; i--) {
       if (this.scopes[i].has(name)) {
-        // Mark as used
         this.scopes[i].get(name).used = true;
         return true;
       }
@@ -413,7 +382,6 @@ class SemanticAnalyzer {
     return false;
   }
 
-  // Extraction methods (simplified - would need to be adapted for real AST)
   extractIdentifier(node) {
     if (typeof node === 'string') return node;
     if (node && node.name) return node.name;
