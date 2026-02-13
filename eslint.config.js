@@ -1,0 +1,43 @@
+import globals from 'globals';
+import eslint from '@eslint/js';
+
+export default [
+  eslint.configs.recommended,
+  {
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'commonjs',
+      globals: {
+        ...globals.node
+      }
+    },
+    rules: {
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      'prefer-const': 'error',
+      'no-var': 'error',
+      'eqeqeq': ['error', 'always'],
+      'curly': ['error', 'all'],
+      'no-trailing-spaces': 'error',
+      'no-multiple-empty-lines': ['error', { max: 1 }],
+      'comma-dangle': ['error', 'never'],
+      'quotes': ['error', 'single', { avoidEscape: true }],
+      'semi': ['error', 'always'],
+      'space-before-function-paren': [
+        'error',
+        { anonymous: 'never', named: 'never', asyncArrow: 'always' }
+      ],
+      'object-curly-spacing': ['error', 'always'],
+      'array-bracket-spacing': ['error', 'never'],
+      'key-spacing': ['error', { beforeColon: false, afterColon: true }],
+      'keyword-spacing': ['error', { before: true, after: true }],
+      'space-infix-ops': 'error',
+      'indent': ['error', 2, { SwitchCase: 1 }],
+      'no-constant-condition': 'off',
+      'no-empty': 'off'
+    }
+  },
+  {
+    ignores: ['node_modules/**', 'out/**', 'dist/**', '*.vsix', 'utils/**', 'src/test/**', 'build.js']
+  }
+];
