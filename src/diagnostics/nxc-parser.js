@@ -7,7 +7,6 @@ class NXCParser {
   }
 
   initializeGrammar() {
-    // Use the original grammar that worked
     const grammarText = `
 NXC {
   Program = ListOf<TopLevelItem, "">
@@ -223,7 +222,7 @@ NXC {
       
       const lineInfo = this.getLineInfo(sourceCode, position);
       
-      console.log(`Parser: Erro encontrado na linha ${lineInfo.line}, coluna ${lineInfo.column}: ${message}`);
+        console.log(`Parser: Error found at line ${lineInfo.line}, column ${lineInfo.column}: ${message}`);
       
       errors.push({
         message,
@@ -312,7 +311,6 @@ NXC {
     const lines = sourceCode.split(/\r?\n/);
     
     lines.forEach((line, index) => {
-      // Warning for lines too long
       if (line.length > 120) {
         warnings.push({
           message: 'Line too long (>120 characters)',
@@ -323,7 +321,6 @@ NXC {
         });
       }
       
-      // Warning for mixed tabs and spaces
       if (line.includes('\t') && line.includes('  ')) {
         warnings.push({
           message: 'Mixed tabs and spaces for indentation',
@@ -334,7 +331,6 @@ NXC {
         });
       }
       
-      // Warning for unused variables (basic)
       const varMatch = line.match(/^\s*(int|float|byte|char|string|bool)\s+(\w+)/);
       if (varMatch) {
         const varName = varMatch[2];
