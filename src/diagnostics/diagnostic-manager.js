@@ -16,13 +16,19 @@ class DiagnosticManager {
     this.diagnosticCollection.dispose();
   }
 
-  async analyzeDocument(document) {
-    if (document.languageId !== 'nxc') {
-      console.log(`Ignoring non-NXC document: ${document.languageId}`);
-      return;
-    }
+    async analyzeDocument(document) {
+        if (document.languageId !== 'nxc') {
+            console.log(`Ignoring non-NXC document: ${document.languageId}`);
+            return;
+        }
 
-    const uri = document.uri.toString();
+        const config = vscode.workspace.getConfiguration('nxc');
+        if (!config.get('diagnostics.enabled')) {
+            this.diagnosticCollection.delete(document.uri);
+            return;
+        }
+
+        const uri = document.uri.toString();
     console.log(`Starting document analysis: ${document.fileName}`);
 
     if (this.analysisQueue.has(uri)) {
