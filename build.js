@@ -5,13 +5,11 @@ const { execSync } = require('child_process');
 
 console.log('🔨 Starting NXC extension build...');
 
-// Verifica se as dependências estão instaladas
 if (!fs.existsSync('node_modules')) {
   console.log('📦 Installing dependencies...');
   execSync('bun install', { stdio: 'inherit' });
 }
 
-// Check directory structure
 const requiredDirs = ['src', 'src/diagnostics', 'src/config', 'src/test'];
 requiredDirs.forEach(dir => {
   if (!fs.existsSync(dir)) {
@@ -20,7 +18,6 @@ requiredDirs.forEach(dir => {
   }
 });
 
-// Check essential files
 const requiredFiles = [
   'src/extension.js',
   'src/diagnostics/nxc-parser.js',
@@ -41,7 +38,6 @@ if (!allFilesExist) {
   process.exit(1);
 }
 
-// Validate package.json
 try {
   const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 
@@ -57,10 +53,8 @@ try {
   process.exit(1);
 }
 
-// Execute basic syntax checks
 console.log('🧪 Running syntax checks...');
 try {
-  // Check file syntax without executing (avoids vscode module error)
   const fs = require('fs');
   const files = [
     'src/extension.js',
@@ -71,7 +65,6 @@ try {
 
   files.forEach(file => {
     const content = fs.readFileSync(file, 'utf8');
-    // Basic JavaScript syntax check
     try {
       new Function(content);
     } catch (syntaxError) {
@@ -85,7 +78,6 @@ try {
   process.exit(1);
 }
 
-// Generate VSIX package if requested
 if (process.argv.includes('--package')) {
   console.log('📦 Generating VSIX package...');
   try {
@@ -97,11 +89,9 @@ if (process.argv.includes('--package')) {
   }
 }
 
-// Run tests if requested
 if (process.argv.includes('--test')) {
   console.log('🧪 Running tests...');
   try {
-    // Here you can add your tests
     console.log('✅ All tests passed');
   } catch (error) {
     console.error('❌ Tests failed:', error.message);
